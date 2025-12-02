@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, AnyUrl  # Изменяем HttpUrl на AnyUrl
 from datetime import datetime
 from typing import Optional
 from enum import Enum
@@ -24,7 +24,7 @@ class MediaResponse(MediaBase):
     owner_user_id: Optional[int] = None
     width: Optional[int] = None
     height: Optional[int] = None
-    public_url: Optional[HttpUrl] = None  # Добавляем публичный URL
+    public_url: Optional[AnyUrl] = None  # Изменяем HttpUrl на AnyUrl
     created_at: datetime
     updated_at: Optional[datetime] = None
     

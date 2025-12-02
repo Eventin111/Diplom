@@ -87,19 +87,57 @@ async def get_media(
     db: AsyncSession = Depends(get_db)
 ):
     """Получить информацию о медиа"""
-    media_repo = MediaRepository()
-    media = await media_repo.get(db, media_id)
-    if not media:
-        raise HTTPException(status_code=404, detail="Медиа не найдено")
+    logger.info(f"GET /media/{media_id} вызван")
     
-    # Добавляем публичный URL если S3 настроен
     try:
-        from app.core.config import settings
-        if settings.S3_PUBLIC_URL:
-            media.public_url = f"{settings.S3_PUBLIC_URL}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
-        elif settings.S3_ENDPOINT:
-            media.public_url = f"{settings.S3_ENDPOINT}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
+        media_repo = MediaRepository()
+        logger.info(f"Создан MediaRepository")
+        
+        media = await media_repo.get(db, media_id)
+        logger.info(f"Результат media_repo.get: {media}")
+        
+        if not media:
+            logger.warning(f"Медиа {media_id} не найдено")
+            raise HTTPException(status_code=404, detail="Медиа не найдено")
+        
+        logger.info(f"Медиа найдено: id={media.id}, storage_key={media.storage_key}")
+        
+        # Создаем объект ответа
+        media_dict = {
+            "id": media.id,
+            "owner_user_id": media.owner_user_id,
+            "kind": media.kind,
+            "storage_key": media.storage_key,
+            "width": media.width,
+            "height": media.height,
+            "created_at": media.created_at,
+            "updated_at": media.updated_at,
+        }
+        
+        # Добавляем публичный URL если есть storage_key
+        if media.storage_key:
+            try:
+                from app.core.config import settings
+                logger.info(f"S3_PUBLIC_URL: {settings.S3_PUBLIC_URL}")
+                logger.info(f"S3_ENDPOINT: {settings.S3_ENDPOINT}")
+                logger.info(f"S3_BUCKET_NAME: {settings.S3_BUCKET_NAME}")
+                
+                if settings.S3_PUBLIC_URL:
+                    public_url = f"{settings.S3_PUBLIC_URL}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
+                else:
+                    public_url = f"{settings.S3_ENDPOINT}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
+                
+                logger.info(f"Сформирован public_url: {public_url}")
+                media_dict["public_url"] = public_url
+            except Exception as e:
+                logger.warning(f"Не удалось добавить public_url: {e}")
+        
+        response = MediaResponse(**media_dict)
+        logger.info(f"Возвращаем ответ: {response}")
+        return response
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning(f"Не удалось добавить public_url: {e}")
-    
-    return media
+        logger.error(f"Необработанное исключение в get_media: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")

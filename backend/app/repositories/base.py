@@ -26,22 +26,32 @@ class BaseRepository(Generic[ModelType]):
                 detail="Нарушение целостности данных (возможно, дубликат или неверная ссылка)"
             )
         elif isinstance(error, SQLAlchemyError):
+            # Логируем полную ошибку для дебага
+            logger.error(f"SQLAlchemy ошибка детально: {str(error)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Ошибка базы данных"
+                detail="Ошибка базы данных" 
             )
         else:
+            # Для всех других ошибок
+            logger.exception(f"Неожиданная ошибка при {operation}:")  # Это выведет traceback
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Внутренняя ошибка сервера"
+                detail=f"Внутренняя ошибка сервера: {str(error)}"
             )
 
     async def get(self, db: AsyncSession, id: int) -> Optional[ModelType]:
+        """Получить объект по ID"""
+        logger.info(f"BaseRepository.get вызван для модели {self.model.__name__} с id={id}")
         try:
             result = await db.execute(select(self.model).where(self.model.id == id))
-            return result.scalar_one_or_none()
+            obj = result.scalar_one_or_none()
+            logger.info(f"BaseRepository.get результат: {obj}")
+            return obj
         except Exception as e:
-            await self._handle_db_error(f"получении {self.model.__name__} с id {id}", e)
+            logger.error(f"Исключение в BaseRepository.get: {e}", exc_info=True)
+            # Пробрасываем исключение дальше для нормальной обработки
+            raise
 
     async def get_multi(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 100
