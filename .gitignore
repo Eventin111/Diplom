@@ -1,0 +1,187 @@
+# ====================================
+# Python
+# ====================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.ropeproject
+
+# ====================================
+# Virtual Environments
+# ====================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ====================================
+# IDE (VS Code)
+# ====================================
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# ====================================
+# Database
+# ====================================
+# PostgreSQL dumps
+*.dump
+*.sql
+*.backup
+pg_data/
+postgres_data/
+
+# ====================================
+# Alembic Migrations
+# ====================================
+# Не игнорируем папку alembic/versions полностью!
+# Игнорируем только автогенерируемые файлы alembic.ini (если есть шаблон)
+# Сами файлы миграций должны быть в репозитории
+alembic.ini.local
+alembic.local.ini
+
+# ====================================
+# MinIO / S3 локальное хранилище
+# ====================================
+minio_data/
+s3_local/
+storage/
+uploads/
+# Игнорируем загруженные файлы, но не структуру папок
+media/*
+!media/.gitkeep
+!media/*.example
+static/uploads/*
+!static/uploads/.gitkeep
+
+# ====================================
+# Environment Variables & Secrets
+# ====================================
+.env
+.env.local
+.env.*.local
+.secrets/
+credentials/
+keys/
+*.pem
+*.key
+*.crt
+config.yaml
+config.yml
+config/local.yaml
+secrets.yaml
+docker-compose.override.yml
+
+# Но сохраняем примеры
+!.env.example
+!config.example.yaml
+!docker-compose.example.yml
+
+# ====================================
+# Docker
+# ====================================
+docker-data/
+.dockerignore
+
+# ====================================
+# Логи и временные файлы
+# ====================================
+*.log
+logs/
+*.log.*
+log/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ====================================
+# Операционная система
+# ====================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Кэш
+.cache/
+__pycache__/
+
+# ====================================
+# PyCharm (на всякий случай)
+# ====================================
+.idea/
+*.iml
+*.iws
+
+# ====================================
+# Poetry / Pipenv
+# ====================================
+Pipfile.lock
+poetry.lock
+# Но poetry.lock обычно коммитят! Раскомментируйте если не используете
+# poetry.lock
+
+# ====================================
+# Файлы профилирования
+# ====================================
+.prof
+*.prof
+*.profile
+
+# ====================================
+# Миграции (дополнительно)
+# ====================================
+# Автогенерируемые миграции Alembic (если они в отдельной папке)
+# alembic/versions/*.py  # НЕ ИГНОРИРУЙТЕ ЭТУ СТРОЧКУ - миграции должны быть в репо!

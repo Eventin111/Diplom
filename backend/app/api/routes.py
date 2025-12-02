@@ -1,0 +1,8 @@
+from fastapi import APIRouter
+from app.api.v1 import auth, feed, garments, media
+
+api_router = APIRouter()
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(media.router, prefix="/media", tags=["media"])
+api_router.include_router(garments.router, prefix="/garments", tags=["garments"])
+api_router.include_router(feed.router, prefix="/feed", tags=["feed"])
