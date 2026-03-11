@@ -6,3 +6,8 @@ __pycache__/
 
 # Model weights and checkpoint data (downloaded or generated at runtime)
 checkpoints/
+
+# Coverage and outputs generated during tests
+.coverage
+.coveragerc
+images_output/
