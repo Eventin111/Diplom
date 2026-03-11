@@ -3,3 +3,6 @@ __pycache__/
 .vscode/
 *.pyc
 .uuid
+
+# Model weights and checkpoint data (downloaded or generated at runtime)
+checkpoints/
