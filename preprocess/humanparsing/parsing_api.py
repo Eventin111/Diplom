@@ -17,7 +17,13 @@ PROJECT_ROOT = Path(__file__).absolute().parents[0].absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 import os
 from utils.transforms import transform_logits
-from tqdm import tqdm
+
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover
+    # tqdm is optional for tests; fall back to an identity iterator.
+    tqdm = lambda x, **kwargs: x
+
 from PIL import Image
 
 
