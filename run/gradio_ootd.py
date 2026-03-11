@@ -2,9 +2,13 @@ import gradio as gr
 import os
 from pathlib import Path
 import sys
-import torch
-from PIL import Image, ImageOps
 
+try:
+    import torch
+except ImportError:  # pragma: no cover
+    torch = None
+
+from PIL import Image, ImageOps
 from utils_ootd import get_mask_location
 
 PROJECT_ROOT = Path(__file__).absolute().parents[1].absolute()
@@ -16,14 +20,33 @@ from preprocess.humanparsing.run_parsing import Parsing
 from ootd.inference_ootd_hd import OOTDiffusionHD
 from ootd.inference_ootd_dc import OOTDiffusionDC
 
+# Lazy-initialized models to avoid heavy imports at module import time
+openpose_model_hd = None
+parsing_model_hd = None
+ootd_model_hd = None
 
-openpose_model_hd = OpenPose(0)
-parsing_model_hd = Parsing(0)
-ootd_model_hd = OOTDiffusionHD(0)
+openpose_model_dc = None
+parsing_model_dc = None
+ootd_model_dc = None
 
-openpose_model_dc = OpenPose(1)
-parsing_model_dc = Parsing(1)
-ootd_model_dc = OOTDiffusionDC(1)
+
+def _ensure_models_initialized():
+    global openpose_model_hd, parsing_model_hd, ootd_model_hd
+    global openpose_model_dc, parsing_model_dc, ootd_model_dc
+
+    if openpose_model_hd is None:
+        openpose_model_hd = OpenPose(0)
+    if parsing_model_hd is None:
+        parsing_model_hd = Parsing(0)
+    if ootd_model_hd is None:
+        ootd_model_hd = OOTDiffusionHD(0)
+
+    if openpose_model_dc is None:
+        openpose_model_dc = OpenPose(1)
+    if parsing_model_dc is None:
+        parsing_model_dc = Parsing(1)
+    if ootd_model_dc is None:
+        ootd_model_dc = OOTDiffusionDC(1)
 
 
 category_dict = ['upperbody', 'lowerbody', 'dress']
@@ -38,7 +61,9 @@ garment_dc = os.path.join(example_path, 'garment/048554_1.jpg')
 
 def process_hd(vton_img, garm_img, n_samples, n_steps, image_scale, seed):
     model_type = 'hd'
-    category = 0 # 0:upperbody; 1:lowerbody; 2:dress
+    category = 0  # 0:upperbody; 1:lowerbody; 2:dress
+
+    _ensure_models_initialized()
 
     with torch.no_grad():
         garm_img = Image.open(garm_img).resize((768, 1024))
@@ -74,7 +99,9 @@ def process_dc(vton_img, garm_img, category, n_samples, n_steps, image_scale, se
     elif category == 'Lower-body':
         category = 1
     else:
-        category =2
+        category = 2
+
+    _ensure_models_initialized()
 
     with torch.no_grad():
         garm_img = Image.open(garm_img).resize((768, 1024))

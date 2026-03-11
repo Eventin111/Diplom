@@ -1,24 +1,38 @@
 from pathlib import Path
 import os
 
-import torch
-import numpy as np
-from PIL import Image
-import cv2
+# Allow tests to import this module even if heavy ML dependencies are not installed.
+try:
+    import torch
+    import numpy as np
+    from PIL import Image
+    import cv2
+    import random
+    import time
 
-import random
-import time
+    from ootd.pipelines_ootd.pipeline_ootd import OotdPipeline
+    from ootd.pipelines_ootd.unet_garm_2d_condition import UNetGarm2DConditionModel
+    from ootd.pipelines_ootd.unet_vton_2d_condition import UNetVton2DConditionModel
+    from diffusers import UniPCMultistepScheduler
+    from diffusers import AutoencoderKL
 
-from ootd.pipelines_ootd.pipeline_ootd import OotdPipeline
-from ootd.pipelines_ootd.unet_garm_2d_condition import UNetGarm2DConditionModel
-from ootd.pipelines_ootd.unet_vton_2d_condition import UNetVton2DConditionModel
-from diffusers import UniPCMultistepScheduler
-from diffusers import AutoencoderKL
+    from transformers import AutoProcessor, CLIPVisionModelWithProjection
+    from transformers import CLIPTextModel, CLIPTokenizer
 
-import torch.nn as nn
-import torch.nn.functional as F
-from transformers import AutoProcessor, CLIPVisionModelWithProjection
-from transformers import CLIPTextModel, CLIPTokenizer
+    _HAS_TORCH = True
+except ImportError:  # pragma: no cover
+    torch = np = Image = cv2 = None
+    random = time = None
+    OotdPipeline = None
+    UNetGarm2DConditionModel = None
+    UNetVton2DConditionModel = None
+    UniPCMultistepScheduler = None
+    AutoencoderKL = None
+    AutoProcessor = None
+    CLIPVisionModelWithProjection = None
+    CLIPTextModel = None
+    CLIPTokenizer = None
+    _HAS_TORCH = False
 
 # NOTE: paths are resolved relative to the repository root (one level above `ootd/`).
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,9 +41,16 @@ VIT_PATH = CHECKPOINTS_ROOT / "clip-vit-large-patch14"
 VAE_PATH = CHECKPOINTS_ROOT / "ootd"
 MODEL_PATH = CHECKPOINTS_ROOT / "ootd"
 
+
 class OOTDiffusion:
 
     def __init__(self, gpu_id, unet_checkpoint_path: str = None):
+        if not _HAS_TORCH:
+            raise ImportError(
+                "OOTDiffusion requires torch, diffusers, transformers, and related dependencies. "
+                "Install requirements or mock this class for tests."
+            )
+
         self.gpu_id = 'cuda:' + str(gpu_id)
 
         if unet_checkpoint_path is None:
@@ -89,7 +110,8 @@ class OOTDiffusion:
         return inputs.input_ids
 
 
-    def __call__(self,
+    def __call__(
+                self,
                 model_type='hd',
                 category='upperbody',
                 image_garm=None,

@@ -2,15 +2,20 @@ import pdb
 from pathlib import Path
 import sys
 
+# Optional dependencies; tests should be able to import this module even if they are missing.
+try:
+    import torch
+    import numpy as np
+    import cv2
+    import torchvision.transforms as transforms
+    from torch.utils.data import DataLoader
+except ImportError:  # pragma: no cover
+    torch = np = cv2 = transforms = None
+    DataLoader = None
+
 PROJECT_ROOT = Path(__file__).absolute().parents[0].absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 import os
-import torch
-import numpy as np
-import cv2
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from datasets.simple_extractor_dataset import SimpleFolderDataset
 from utils.transforms import transform_logits
 from tqdm import tqdm
 from PIL import Image
@@ -119,6 +124,14 @@ def refine_hole(parsing_result_filled, parsing_result, arm_mask):
     return refine_hole_mask + arm_mask
 
 def onnx_inference(session, lip_session, input_dir):
+    if torch is None or DataLoader is None:
+        raise ImportError(
+            "onnx_inference requires 'torch' and its data utilities. Install requirements or use a mock for tests."
+        )
+
+    # Lazy imports to avoid requiring torch/cv2 when importing the module.
+    from datasets.simple_extractor_dataset import SimpleFolderDataset
+
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.406, 0.456, 0.485], std=[0.225, 0.224, 0.229])

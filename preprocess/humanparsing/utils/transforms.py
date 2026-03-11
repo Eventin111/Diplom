@@ -10,7 +10,11 @@ from __future__ import print_function
 
 import numpy as np
 import cv2
-import torch
+
+try:
+    import torch
+except ImportError:  # pragma: no cover
+    torch = None
 
 class BRG2Tensor_transform(object):
     def __call__(self, pic):

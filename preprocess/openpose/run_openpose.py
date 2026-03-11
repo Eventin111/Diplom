@@ -1,6 +1,4 @@
 import pdb
-
-import config
 from pathlib import Path
 import sys
 
@@ -8,26 +6,37 @@ PROJECT_ROOT = Path(__file__).absolute().parents[0].absolute()
 sys.path.insert(0, str(PROJECT_ROOT))
 import os
 
-import cv2
-import einops
-import numpy as np
+# Optional dependencies; tests should be able to import this module even if they are missing.
+try:
+    import cv2
+    import einops
+    import numpy as np
+    from PIL import Image
+    import torch
+    from preprocess.openpose.annotator.util import resize_image, HWC3
+    from preprocess.openpose.annotator.openpose import OpenposeDetector
+except ImportError:  # pragma: no cover
+    cv2 = einops = np = Image = torch = None
+    resize_image = HWC3 = OpenposeDetector = None
+
 import random
 import time
 import json
 
 # from pytorch_lightning import seed_everything
-from preprocess.openpose.annotator.util import resize_image, HWC3
-from preprocess.openpose.annotator.openpose import OpenposeDetector
-
 import argparse
-from PIL import Image
-import torch
-import pdb
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 
 class OpenPose:
     def __init__(self, gpu_id: int):
+        # Allow importing this module even if heavy dependencies are not installed.
+        if torch is None or OpenposeDetector is None:
+            raise ImportError(
+                "OpenPose requires dependencies 'torch', 'opencv-python', 'einops', and "
+                "the OpenPose model files. Install requirements or use a mock for tests."
+            )
+
         self.gpu_id = gpu_id
         self.use_cuda = torch.cuda.is_available()
         if self.use_cuda:
