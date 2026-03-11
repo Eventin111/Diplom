@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=70"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["src/adapters/model/*", "*__main__.py"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
