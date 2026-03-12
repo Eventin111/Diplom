@@ -85,6 +85,10 @@ minio_data/
 s3_local/
 storage/
 uploads/
+# Не игнорируем storage-слой frontend (Clean Architecture)
+!frontend/src/core/infrastructure/storage/
+!frontend/src/core/infrastructure/storage/browserStorage.js
+!frontend/src/core/infrastructure/storage/browserStorage.test.js
 # Игнорируем загруженные файлы, но не структуру папок
 media/*
 !media/.gitkeep
