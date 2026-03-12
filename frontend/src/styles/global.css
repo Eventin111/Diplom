@@ -1,0 +1,94 @@
+/* Reset и базовые стили */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Контейнер для мобильной версии на ПК */
+.app-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  margin: 0 auto;
+}
+
+/* На ПК показываем как мобильное устройство */
+@media (min-width: 768px) {
+  .app-container {
+    max-width: 430px; /* Ширина iPhone 14 Pro Max */
+    height: 100vh;
+    position: relative;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+  
+  /* Для очень широких экранов */
+  @media (min-height: 900px) {
+    .app-container {
+      margin: 20px auto;
+      height: calc(100vh - 40px);
+      border-radius: 40px;
+      overflow: hidden;
+    }
+  }
+}
+
+/* Скрываем скроллбар везде */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Предотвращение выделения */
+* {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Улучшение рендеринга */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Улучшение для инпутов на мобильных */
+input, textarea, button {
+  font-size: 16px; /* Предотвращает zoom на iOS */
+}
+
+/* Убираем outline при фокусе, но оставляем доступность */
+*:focus {
+  outline: none;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+} 

@@ -1,0 +1,938 @@
+.profile-container {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Контейнер с прокруткой */
+.profile-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px; /* Чтобы контент не залезал под навигацию */
+}
+
+/* Скроллбар для профиля */
+.profile-scroll-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.profile-scroll-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.profile-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 2px;
+}
+
+/* Шапка профиля */
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.back-btn, .logout-btn {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 10px 20px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.back-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.logout-btn {
+  background: rgba(255, 0, 0, 0.1);
+  border-color: rgba(255, 0, 0, 0.3);
+  color: #ff6666;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 0, 0, 0.2);
+}
+
+.profile-title {
+  font-size: 1.5rem;
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Баннер для гостя */
+.guest-banner {
+  background: linear-gradient(135deg, rgba(255, 0, 0, 0.1), rgba(255, 51, 51, 0.1));
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  margin: 20px;
+  border-radius: 15px;
+  padding: 25px;
+}
+
+.guest-banner-content {
+  text-align: center;
+}
+
+.guest-badge {
+  display: inline-block;
+  background: rgba(102, 102, 102, 0.3);
+  color: #aaa;
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.guest-banner h3 {
+  font-size: 1.3rem;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.guest-banner p {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.guest-banner-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.guest-action-btn {
+  padding: 12px 25px;
+  border-radius: 25px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+  font-size: 0.95rem;
+}
+
+.guest-action-btn.primary {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  color: white;
+}
+
+.guest-action-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(255, 0, 0, 0.3);
+}
+
+.guest-action-btn.secondary {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.guest-action-btn.secondary:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-2px);
+}
+
+/* Информация пользователя */
+.profile-info {
+  padding: 30px 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.avatar-section {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid #ff0000;
+  object-fit: cover;
+}
+
+.edit-avatar-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: #ff0000;
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.username {
+  font-size: 1.8rem;
+  margin: 10px 0 5px;
+  color: var(--text-primary);
+}
+
+.user-email {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.edit-profile-btn {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.edit-profile-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(255, 0, 0, 0.3);
+}
+
+/* Статистика */
+.stats-section {
+  padding: 30px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section-title {
+  font-size: 1.4rem;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: rgba(255, 0, 0, 0.3);
+  transform: translateY(-5px);
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #ff0000;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Примерки */
+.outfits-section {
+  padding: 30px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.view-all-btn {
+  background: transparent;
+  border: none;
+  color: #ff0000;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 8px 15px;
+  border-radius: 15px;
+  transition: all 0.3s ease;
+}
+
+.view-all-btn:hover {
+  background: rgba(255, 0, 0, 0.1);
+}
+
+.outfits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.outfit-card {
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+  height: 200px;
+  cursor: pointer;
+}
+
+.outfit-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.outfit-card:hover img {
+  transform: scale(1.1);
+}
+
+.outfit-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  padding: 15px;
+}
+
+.outfit-card:hover .outfit-overlay {
+  opacity: 1;
+}
+
+.outfit-name {
+  color: white;
+  font-weight: 600;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.try-again-btn {
+  background: #ff0000;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.try-again-btn:hover {
+  background: #ff3333;
+}
+
+/* Настройки темы */
+.theme-settings {
+  margin-bottom: 20px;
+}
+
+.theme-option-large {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.theme-option-large:hover {
+  border-color: rgba(255, 0, 0, 0.3);
+  transform: translateY(-3px);
+}
+
+.theme-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.theme-icon {
+  font-size: 2rem;
+}
+
+.theme-details {
+  flex: 1;
+}
+
+.theme-name {
+  margin: 0 0 5px 0;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.theme-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Переключатель темы */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.switch.small {
+  width: 50px;
+  height: 28px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.switch.small .slider:before {
+  height: 20px;
+  width: 20px;
+  left: 4px;
+  bottom: 4px;
+}
+
+input:checked + .slider {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.switch.small input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+.theme-toggle-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  min-width: 50px;
+}
+
+/* Секция с фото для примерок */
+.photos-section {
+  padding: 30px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.photos-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.add-photo-btn {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 25px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.add-photo-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(255, 0, 0, 0.3);
+}
+
+/* Пустое состояние */
+.empty-photos {
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--card-bg);
+  border: 2px dashed var(--border-color);
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+
+.empty-photos-icon {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.empty-photos h4 {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.empty-photos p {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.upload-btn {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  color: white;
+  border: none;
+  padding: 12px 30px;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(255, 0, 0, 0.3);
+}
+
+/* Сетка фото */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.photo-item {
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+  height: 150px;
+  cursor: pointer;
+  background: var(--card-bg);
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.photo-item.primary {
+  border-color: #ff0000;
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+}
+
+.photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.photo-item:hover img {
+  transform: scale(1.1);
+}
+
+.photo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  padding: 10px;
+}
+
+.photo-item:hover .photo-overlay {
+  opacity: 1;
+}
+
+.primary-badge {
+  background: #ff0000;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  align-self: flex-start;
+}
+
+.photo-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.photo-action-btn {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.photo-action-btn:hover {
+  transform: scale(1.1);
+}
+
+.delete-btn:hover {
+  background: rgba(255, 0, 0, 0.7);
+  border-color: rgba(255, 0, 0, 0.9);
+}
+
+.set-primary-btn:hover {
+  background: rgba(255, 215, 0, 0.7);
+  border-color: rgba(255, 215, 0, 0.9);
+}
+
+.photo-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.photo-name {
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.photo-date {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+}
+
+/* Кнопка добавления фото */
+.add-photo-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  background: transparent;
+}
+
+.add-photo-item:hover {
+  border-color: rgba(255, 0, 0, 0.5);
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.add-photo-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-icon {
+  font-size: 2rem;
+  color: var(--text-secondary);
+}
+
+.add-text {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Информация о фото */
+.photos-info {
+  background: var(--card-bg);
+  border-radius: 15px;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.photos-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.hint-icon {
+  font-size: 1rem;
+  color: #ff0000;
+}
+
+.photos-count {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .photos-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .photo-item {
+    height: 130px;
+  }
+}
+
+@media (max-width: 480px) {
+  .photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .photo-item {
+    height: 120px;
+  }
+  
+  .photos-section .section-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  
+  .add-photo-btn {
+    align-self: stretch;
+  }
+}
+
+.settings-section {
+  padding: 30px 20px;
+}
+
+.settings-list {
+  background: var(--card-bg);
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.setting-item, .setting-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.setting-toggle {
+  cursor: default;
+}
+
+.setting-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.setting-item:last-child, .setting-toggle:last-child {
+  border-bottom: none;
+}
+
+.setting-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.logout-item {
+  color: #ff6666;
+}
+
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .outfits-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .guest-banner-buttons {
+    flex-direction: column;
+  }
+  
+  .guest-action-btn {
+    width: 100%;
+  }
+  
+  .profile-scroll-container {
+    padding-bottom: 70px;
+  }
+}
+/* Исправление скроллинга профиля */
+.profile-container {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.profile-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px;
+  height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Убедимся, что статистика видна */
+.stats-section {
+  padding: 30px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: rgba(255, 0, 0, 0.3);
+  transform: translateY(-5px);
+}
+
+.stat-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #ff0000;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Убираем курсор с фото */
+.photo-item {
+  cursor: default !important;
+}
+
+/* Кнопка добавления фото должна быть кликабельной */
+.add-photo-item {
+  cursor: pointer !important;
+}
+
+@media (max-width: 480px) {
+  .profile-header {
+    padding: 15px;
+  }
+  
+  .profile-info {
+    padding: 20px 15px;
+  }
+  
+  .stats-section,
+  .outfits-section,
+  .settings-section {
+    padding: 20px 15px;
+  }
+  
+  .theme-option-large {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .theme-toggle {
+    align-self: flex-end;
+  }
+}
