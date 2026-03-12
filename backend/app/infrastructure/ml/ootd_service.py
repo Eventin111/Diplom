@@ -10,7 +10,7 @@ from PIL import Image
 
 # Добавляем путь к ML коду
 # Путь: backend/app/infrastructure/ml/ootd_service.py -> корень проекта
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent  # -> D:\Projects\SwipeIt
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent  # -> D:\Projects\SwipeIt
 ML_ROOT = PROJECT_ROOT / "ml"  # -> D:\Projects\SwipeIt\ml
 
 if str(ML_ROOT) not in sys.path:

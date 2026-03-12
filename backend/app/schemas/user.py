@@ -4,7 +4,7 @@ from typing import Optional
 import re
 
 class UsernameValidationMixin:
-    @validator('username')
+    @validator('username', check_fields=False)
     def username_alphanumeric(cls, v):
         if v and not re.match("^[a-zA-Z0-9_]+$", v):
             raise ValueError('Username может содержать только буквы, цифры и подчеркивания')

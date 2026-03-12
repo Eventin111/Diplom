@@ -1,0 +1,23 @@
+[run]
+source =
+    app
+omit =
+    app/api/*
+    app/models/*
+    app/repositories/*
+    app/main.py
+    app/architecture.py
+    app/core/db.py
+    app/infrastructure/__init__.py
+    app/application/__init__.py
+    app/application/dto/__init__.py
+    app/application/use_cases/__init__.py
+    app/domain/*
+    app/schemas/__init__.py
+    app/core/__init__.py
+    app/__init__.py
+
+[report]
+fail_under = 70
+show_missing = True
+skip_covered = False
