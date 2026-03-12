@@ -6,6 +6,7 @@
 
 - **Backend**: FastAPI (Python 3.10)
 - **ML**: OOTDiffusion (PyTorch 2.0+)
+- **Frontend**: React 18 + React Router
 - **Database**: PostgreSQL
 - **Storage**: MinIO (S3-совместимое хранилище)
 
@@ -15,7 +16,7 @@
 
 ```bash
 git clone https://github.com/your-repo/swipeit.git
-cd swipeit
+cd swipeit/Diplom
 ```
 
 ### 2. Настройка Python (3.10)
@@ -25,10 +26,9 @@ conda create -n swipeit python=3.10
 conda activate swipeit
 ```
 
-### 3. Установка зависимостей
+### 3. Установка зависимостей backend + ml
 
 ```bash
-cd backend
 pip install -r requirements.txt
 ```
 
@@ -37,15 +37,17 @@ pip install -r requirements.txt
 Создай файл `.env` в папке `backend/`:
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/swipeit
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=your-access-key
-MINIO_SECRET_KEY=your-secret-key
-MINIO_BUCKET_NAME=swipeit
-MINIO_SECURE=false
+DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5432/swipeit
 SECRET_KEY=generate-secure-random-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+S3_ENDPOINT=http://localhost:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin123
+S3_BUCKET_NAME=swipeit-media
+S3_REGION=us-east-1
+S3_SECURE=false
+REDIS_URL=redis://localhost:6379/0
+CORS_ORIGINS=["http://localhost:3000"]
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
 > ⚠️ **Важно**: Замени значения на свои безопасные!
@@ -53,10 +55,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ### 5. Запуск БД и MinIO
 
 ```bash
-docker-compose up -d postgres minio
+docker-compose up -d postgres minio redis
 ```
 
-### 6. Запуск сервера
+### 6. Запуск backend
 
 ```bash
 cd backend
@@ -65,6 +67,16 @@ python run_server.py
 
 Сервер: `http://localhost:8000`  
 API docs: `http://localhost:8000/docs`
+
+### 7. Запуск frontend
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+Frontend: `http://localhost:3000`
 
 ## 👗 Virtual Try-On
 
@@ -94,16 +106,22 @@ POST /api/v1/tryon
 
 ## 📁 Структура
 
-```
-swipeit/
+```text
+Diplom/
 ├── backend/           # FastAPI
-│   ├── app/api/v1/   # Endpoints
+│   ├── app/api/v1/    # Endpoints
 │   ├── run_server.py
-│   └── requirements.txt
+│   └── app/core/config.py
 ├── ml/                # OOTDiffusion
-│   ├── ootd/         # Инференс
+│   ├── run/           # Инференс
 │   └── download_models.py
-└── docker-compose.yml
+├── frontend/          # React frontend
+│   ├── src/core/      # Clean Architecture (domain/app/infra)
+│   ├── src/config/    # Конфигурация фронта
+│   ├── src/pages/
+│   └── src/components/
+├── docker-compose.yml
+└── requirements.txt
 ```
 
 ## ⚠️ Требования

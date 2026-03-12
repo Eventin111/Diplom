@@ -185,3 +185,29 @@ poetry.lock
 # ====================================
 # Автогенерируемые миграции Alembic (если они в отдельной папке)
 # alembic/versions/*.py  # НЕ ИГНОРИРУЙТЕ ЭТУ СТРОЧКУ - миграции должны быть в репо!
+
+# ====================================
+# Frontend (React)
+# ====================================
+frontend/node_modules/
+frontend/build/
+frontend/coverage/
+frontend/.env
+frontend/.env.local
+frontend/.cache/
+frontend/.eslintcache
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# ====================================
+# ML артефакты (веса/результаты)
+# ====================================
+ml/checkpoints/
+ml/results/
+ml/outputs/
+ml/runs/
+*.ckpt
+*.pt
+*.pth
