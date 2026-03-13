@@ -178,7 +178,7 @@ SwipeIt создаётся для того, чтобы устранить две
 
 #### 4.1. Архитектура решения
 
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/6f0866e1-c9d8-4b28-91b0-d20d87de3be5" />
+<img width="1536" height="1024" alt="image" src="file:///Users/egor/Downloads/562966680-a8888a38-4b7d-430d-b24c-662bea259829-2.png" />
 
 Путь запроса пользователя (User Flow):
 
