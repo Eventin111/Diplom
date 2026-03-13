@@ -178,7 +178,7 @@ SwipeIt создаётся для того, чтобы устранить две
 
 #### 4.1. Архитектура решения
 
-<img width="1536" height="1024" alt="image" src="Diplom/Архитектура решения.png" />
+<img width="1536" height="1024" alt="image" src="https://github.com/Eventin111/Diplom/blob/Frontend-Backend-ML/Архитектура%20решения.png" />
 
 Путь запроса пользователя (User Flow):
 
