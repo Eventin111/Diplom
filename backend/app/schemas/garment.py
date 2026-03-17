@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field, validator
 
 from .media import MediaResponse
 
-
 class TitleValidationMixin:
     @validator("title", check_fields=False)
     def title_not_empty(cls, value):
@@ -21,7 +20,6 @@ class GarmentBase(TitleValidationMixin, BaseModel):
     class Config:
         anystr_strip_whitespace = True
 
-
 class GarmentCreate(GarmentBase):
     media_id: Optional[int] = Field(None, gt=0, description="Media asset ID")
     garment_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
@@ -32,7 +30,6 @@ class GarmentCreate(GarmentBase):
             raise ValueError("media_id must be a positive integer")
         return value
 
-
 class GarmentUpdate(TitleValidationMixin, BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     brand: Optional[str] = Field(None, max_length=255)
@@ -41,7 +38,6 @@ class GarmentUpdate(TitleValidationMixin, BaseModel):
 
     class Config:
         anystr_strip_whitespace = True
-
 
 class GarmentResponse(GarmentBase):
     id: int

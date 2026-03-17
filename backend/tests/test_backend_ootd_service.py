@@ -67,7 +67,12 @@ def test_health_check_and_singleton(monkeypatch):
 
     service = module.get_ootd_service()
 
-    assert service.health_check() == {"status": "ready", "model": "OOTDiffusion"}
+    health = service.health_check()
+    assert health["status"] == "ready"
+    assert health["model"] == "OOTDiffusion"
+    assert "gpu_id" in health
+    assert "cuda_available" in health
+    assert "gpu_name" in health
     assert module.get_ootd_service() is service
 
 

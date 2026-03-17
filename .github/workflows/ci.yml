@@ -54,7 +54,7 @@ jobs:
           pip install -r requirements-test.txt
 
       - name: Run backend unit tests
-        run: python -m pytest
+        run: python -m pytest --cov=app --cov-config=.coveragerc --cov-report=term-missing
 
   frontend-tests:
     name: Frontend Tests
@@ -81,4 +81,3 @@ jobs:
 
       - name: Build frontend
         run: npm run build
-

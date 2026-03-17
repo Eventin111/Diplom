@@ -66,7 +66,7 @@ pip install -r requirements.txt
 
 ### 4. Настройка окружения
 
-Создай файл `.env` в папке `backend/`:
+Создай файл `.env` в корне `Diplom/`:
 
 ```env
 DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5432/swipeit
