@@ -64,10 +64,10 @@ def main():
     service = OOTDService(gpu_id=0)
     
     print(f"\n⚙️ Запускаю инференс (на CPU это займёт время)...")
-    print("  num_samples=1, num_steps=10 для быстрого теста")
+    print("  num_samples=1, num_steps=2 для быстрого теста")
     
     # В функции try_on замени print на более подробный вывод:
-    print(f"  num_samples=1, num_steps=10 для быстрого теста")
+    print(f"  num_samples=1, num_steps=2 для быстрого теста")
 
     # Добавь try-except для отладки:
     import sys
@@ -79,7 +79,7 @@ def main():
             model_type="hd",
             category=0,
             scale=2.0,
-            num_steps=1,
+            num_steps=2,
             num_samples=1,
             seed=42,
         )

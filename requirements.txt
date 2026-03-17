@@ -30,7 +30,8 @@ transformers==4.36.2
 accelerate==0.26.1
 matplotlib==3.7.4
 tqdm==4.64.1
-gradio==4.16.0
+# Gradio 4.x requires pydantic>=2 and conflicts with backend (pydantic 1.x)
+gradio==3.50.2
 einops==0.7.0
 onnxruntime==1.16.2
 huggingface_hub==0.19.4

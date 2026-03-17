@@ -51,7 +51,7 @@ class OOTDService:
         model_type: str = "hd",
         category: int = 0,
         scale: float = 2.0,
-        num_steps: int = 20,
+        num_steps: int = 4,
         num_samples: int = 1,
         seed: int = -1,
     ) -> list[Image.Image]:
@@ -103,7 +103,21 @@ class OOTDService:
     
     def health_check(self) -> dict:
         """Проверка готовности сервиса."""
-        return {"status": "ready", "model": "OOTDiffusion"}
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            gpu_name = torch.cuda.get_device_name(self.gpu_id) if cuda_available else None
+        except Exception:
+            cuda_available = False
+            gpu_name = None
+
+        return {
+            "status": "ready",
+            "model": "OOTDiffusion",
+            "gpu_id": self.gpu_id,
+            "cuda_available": cuda_available,
+            "gpu_name": gpu_name,
+        }
 
 
 # Singleton экземпляр

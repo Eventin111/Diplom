@@ -1,5 +1,12 @@
 from pathlib import Path
 import os
+import sys
+
+# Some OOTD checkpoints refer to custom modules as `pipelines_ootd.*`.
+# Ensure that `ml/ootd` is on sys.path so these imports resolve at runtime.
+OOTD_ROOT = Path(__file__).resolve().parent
+if str(OOTD_ROOT) not in sys.path:
+    sys.path.insert(0, str(OOTD_ROOT))
 
 # Allow tests to import this module even if heavy ML dependencies are not installed.
 try:
@@ -51,7 +58,13 @@ class OOTDiffusion:
                 "Install requirements or mock this class for tests."
             )
 
-        self.gpu_id = 'cuda:' + str(gpu_id)
+        self.gpu_id = gpu_id
+        self.device = f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu'
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(gpu_id)
+            print(f"[OOTDiffusion] Using CUDA device {gpu_id}: {gpu_name}")
+        else:
+            print("[OOTDiffusion] CUDA not available, using CPU")
 
         if unet_checkpoint_path is None:
             unet_checkpoint_path = CHECKPOINTS_ROOT / "ootd/ootd_hd/checkpoint-36000"
@@ -86,12 +99,12 @@ class OOTDiffusion:
             use_safetensors=True,
             safety_checker=None,
             requires_safety_checker=False,
-        ).to(self.gpu_id)
+        ).to(self.device)
 
         self.pipe.scheduler = UniPCMultistepScheduler.from_config(self.pipe.scheduler.config)
         
         self.auto_processor = AutoProcessor.from_pretrained(VIT_PATH)
-        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(VIT_PATH).to(self.gpu_id)
+        self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(VIT_PATH).to(self.device)
 
         self.tokenizer = CLIPTokenizer.from_pretrained(
             MODEL_PATH,
@@ -100,7 +113,7 @@ class OOTDiffusion:
         self.text_encoder = CLIPTextModel.from_pretrained(
             MODEL_PATH,
             subfolder="text_encoder",
-        ).to(self.gpu_id)
+        ).to(self.device)
 
 
     def tokenize_captions(self, captions, max_length):
@@ -128,16 +141,17 @@ class OOTDiffusion:
             seed = random.randint(0, 2147483647)
         print('Initial seed: ' + str(seed))
         generator = torch.manual_seed(seed)
+        print(f"[OOTDiffusion] device={self.device}, num_steps={num_steps}, image_scale={image_scale}")
 
         with torch.no_grad():
-            prompt_image = self.auto_processor(images=image_garm, return_tensors="pt").to(self.gpu_id)
+            prompt_image = self.auto_processor(images=image_garm, return_tensors="pt").to(self.device)
             prompt_image = self.image_encoder(prompt_image.data['pixel_values']).image_embeds
             prompt_image = prompt_image.unsqueeze(1)
             if model_type == 'hd':
-                prompt_embeds = self.text_encoder(self.tokenize_captions([""], 2).to(self.gpu_id))[0]
+                prompt_embeds = self.text_encoder(self.tokenize_captions([""], 2).to(self.device))[0]
                 prompt_embeds[:, 1:] = prompt_image[:]
             elif model_type == 'dc':
-                prompt_embeds = self.text_encoder(self.tokenize_captions([category], 3).to(self.gpu_id))[0]
+                prompt_embeds = self.text_encoder(self.tokenize_captions([category], 3).to(self.device))[0]
                 prompt_embeds = torch.cat([prompt_embeds, prompt_image], dim=1)
             else:
                 raise ValueError("model_type must be \'hd\' or \'dc\'!")

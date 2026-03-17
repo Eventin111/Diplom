@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PIL import Image
+import time
 
 from .ports import DiffusionPort, OpenPosePort, ParsingPort
 from .entities import InferenceRequest, InferenceResult
@@ -19,13 +20,16 @@ class RunOOTDInference:
         self._diffusion = diffusion
 
     def execute(self, request: InferenceRequest) -> InferenceResult:
+        t0 = time.perf_counter()
         # Load input images
         model_img = Image.open(request.model_path).resize((768, 1024))
         cloth_img = Image.open(request.cloth_path).resize((768, 1024))
+        t_load = time.perf_counter()
 
         # Preprocess
         keypoints = self._openpose.detect(model_img.resize((384, 512)))
         model_parse, _ = self._parsing.parse(model_img.resize((384, 512)))
+        t_pre = time.perf_counter()
 
         category_utils = {
             "upperbody": "upper_body",
@@ -58,6 +62,11 @@ class RunOOTDInference:
             num_steps=request.num_steps,
             image_scale=request.image_scale,
             seed=request.seed,
+        )
+        t_gen = time.perf_counter()
+
+        print(
+            f"[OOTD Timing] load={t_load - t0:.2f}s preprocess={t_pre - t_load:.2f}s diffusion={t_gen - t_pre:.2f}s total={t_gen - t0:.2f}s"
         )
 
         # Return results (no I/O here, caller decides how/where to save)

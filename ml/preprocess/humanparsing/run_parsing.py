@@ -28,6 +28,15 @@ class Parsing:
             torch.cuda.set_device(gpu_id)
         else:
             print("[Parsing] CUDA not available; running on CPU")
+        available_providers = ort.get_available_providers()
+        use_cuda_provider = self.use_cuda and "CUDAExecutionProvider" in available_providers
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if use_cuda_provider else ["CPUExecutionProvider"]
+
+        if use_cuda_provider:
+            print(f"[Parsing] Using CUDAExecutionProvider (gpu_id={gpu_id})")
+        else:
+            print("[Parsing] CUDAExecutionProvider not available in onnxruntime; using CPUExecutionProvider")
+
         session_options = ort.SessionOptions()
         session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
@@ -38,7 +47,7 @@ class Parsing:
                 'checkpoints/humanparsing/parsing_atr.onnx',
             ),
             sess_options=session_options,
-            providers=['CPUExecutionProvider'],
+            providers=providers,
         )
         self.lip_session = ort.InferenceSession(
             os.path.join(
@@ -46,7 +55,7 @@ class Parsing:
                 'checkpoints/humanparsing/parsing_lip.onnx',
             ),
             sess_options=session_options,
-            providers=['CPUExecutionProvider'],
+            providers=providers,
         )
 
     def __call__(self, input_image):

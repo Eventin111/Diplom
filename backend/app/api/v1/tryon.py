@@ -36,7 +36,7 @@ async def try_on(
     model_type: str = "hd",
     category: int = 0,
     scale: float = 2.0,
-    num_steps: int = 20,
+    num_steps: int = 4,
     num_samples: int = 1,
     seed: int = -1,
     use_case: TryOnUseCase = Depends(get_tryon_use_case),
