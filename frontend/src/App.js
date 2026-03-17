@@ -34,6 +34,14 @@ function AppContent() {
   const [showFeedSplash, setShowFeedSplash] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('appTheme') || 'dark';
+    const root = document.documentElement;
+    root.classList.remove('theme-dark', 'theme-light');
+    root.classList.add(`theme-${savedTheme}`);
+    localStorage.setItem('appTheme', savedTheme);
+  }, []);
+
   // Показываем начальный SplashScreen только при первой загрузке
   useEffect(() => {
     const hasSeenSplash = localStorage.getItem('hasSeenSplash');

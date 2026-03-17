@@ -1,181 +1,363 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { runTryOn } from '../../services/api/tryon';
 import './TryOnPage.css';
+
+const INFERENCE_STEPS = ['Подбираем стиль', 'Уточняем посадку', 'Собираем образ', 'Финальный штрих'];
+
+const readPrimaryProfilePhoto = () => {
+  try {
+    const photosRaw = localStorage.getItem('tryOnPhotos');
+    const indexRaw = localStorage.getItem('primaryPhotoIndex');
+    const photos = photosRaw ? JSON.parse(photosRaw) : [];
+    const parsedIndex = indexRaw ? Number(indexRaw) : 0;
+    const safeIndex =
+      Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < photos.length ? parsedIndex : 0;
+
+    return {
+      photo: Array.isArray(photos) && photos.length > 0 ? photos[safeIndex]?.url || '' : '',
+      count: Array.isArray(photos) ? photos.length : 0,
+      index: safeIndex
+    };
+  } catch (error) {
+    return { photo: '', count: 0, index: 0 };
+  }
+};
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target?.result || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 const TryOnPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const clothInputRef = useRef(null);
+  const autoStartTriggeredRef = useRef(false);
+  const requestInFlightRef = useRef(false);
+
+  const presetClothPhoto = location.state?.clothPhoto || location.state?.photo || '';
+  const [profileInfo, setProfileInfo] = useState(readPrimaryProfilePhoto);
+  const [clothFile, setClothFile] = useState(null);
+  const [clothPreview, setClothPreview] = useState(presetClothPhoto);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState(null);
+  const [resultImage, setResultImage] = useState('');
+  const [error, setError] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
 
   const outfit = location.state?.outfit || {
-    brand: 'Пример бренда',
+    brand: 'Бренд не указан',
     type: 'Одежда',
-    price: '10,000 ₽'
+    price: 'Цена не указана'
   };
 
-  const handleTryOn = () => {
+  const shouldAutoStart = Boolean(location.state?.autoStart);
+  const profileModelPhoto = profileInfo.photo;
+  const clothSourceLabel = clothFile
+    ? 'Загружено пользователем'
+    : presetClothPhoto
+      ? 'Выбрано из ленты'
+      : 'Фото не выбрано';
+
+  useEffect(() => {
+    const syncProfilePhoto = () => {
+      setProfileInfo(readPrimaryProfilePhoto());
+    };
+
+    syncProfilePhoto();
+    window.addEventListener('storage', syncProfilePhoto);
+    return () => window.removeEventListener('storage', syncProfilePhoto);
+  }, []);
+
+  useEffect(() => {
+    setClothPreview(presetClothPhoto);
+    setClothFile(null);
+    setResultImage('');
+    setError('');
+    autoStartTriggeredRef.current = false;
+  }, [presetClothPhoto]);
+
+  const handlePickClothPhoto = () => {
+    clothInputRef.current?.click();
+  };
+
+  const handleClothChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setClothFile(file);
+    setResultImage('');
+    setError('');
+    setClothPreview(await fileToDataUrl(file));
+    event.target.value = '';
+  };
+
+  const handleTryOn = async () => {
+    if (requestInFlightRef.current) {
+      return;
+    }
+
+    const clothImageInput = clothFile || clothPreview;
+
+    if (!profileModelPhoto) {
+      setError('Сначала добавьте и выберите основное фото в профиле.');
+      return;
+    }
+
+    if (!clothImageInput) {
+      setError('Выберите одежду из ленты или загрузите фото одежды.');
+      return;
+    }
+
+    requestInFlightRef.current = true;
     setIsProcessing(true);
-    
-    // Симуляция обработки примерки
-    setTimeout(() => {
-      setResult({
-        success: true,
-        image: 'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=400&h=600&fit=crop',
-        message: 'Примерка успешно выполнена!'
+    setError('');
+    setProgress(3);
+    setElapsedSeconds(0);
+    setActiveStepIndex(0);
+
+    try {
+      const payload = await runTryOn({
+        modelImage: profileModelPhoto,
+        clothImage: clothImageInput,
+        modelType: 'hd',
+        category: 0,
+        scale: 2.0,
+        numSteps: 4,
+        numSamples: 1,
+        seed: -1
       });
+
+      if (!payload.resultUrl) {
+        throw new Error('Сервер вернул пустой результат примерки.');
+      }
+
+      setProgress(100);
+      setActiveStepIndex(INFERENCE_STEPS.length - 1);
+      setResultImage(payload.resultUrl);
+    } catch (requestError) {
+      setError(requestError?.message || 'Ошибка обработки примерки');
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+      requestInFlightRef.current = false;
+    }
   };
 
   const handleSaveResult = () => {
-    console.log('Saving result...');
-    navigate('/');
+    if (!resultImage) {
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = resultImage;
+    link.download = `tryon-result-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handleShare = () => {
-    console.log('Sharing result...');
+  const handleShare = async () => {
+    if (!resultImage || !navigator.share) {
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: 'Результат виртуальной примерки',
+        text: 'Примерка в Swipelt',
+        url: window.location.href
+      });
+    } catch (shareError) {
+      // user canceled share action
+    }
   };
 
-  const handleCancel = () => {
-    navigate('/');
+  const goToProfileWithNav = () => {
+    navigate('/', { state: { openTab: 'profile' } });
   };
+
+  useEffect(() => {
+    if (!shouldAutoStart || autoStartTriggeredRef.current) {
+      return;
+    }
+
+    if (!profileModelPhoto || !clothPreview) {
+      return;
+    }
+
+    const autoStartKey = `tryon-autostart:${location.key || 'default'}`;
+    try {
+      if (sessionStorage.getItem(autoStartKey) === '1') {
+        autoStartTriggeredRef.current = true;
+        return;
+      }
+      sessionStorage.setItem(autoStartKey, '1');
+    } catch (storageError) {
+      // ignore storage limitations in private mode
+    }
+
+    autoStartTriggeredRef.current = true;
+    void handleTryOn();
+  }, [clothPreview, location.key, profileModelPhoto, shouldAutoStart]);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      return;
+    }
+
+    const progressTimer = window.setInterval(() => {
+      setProgress((current) => {
+        if (current >= 92) {
+          return current;
+        }
+
+        const next = Math.min(92, current + Math.floor(Math.random() * 8) + 3);
+        const stepIndex = Math.min(
+          INFERENCE_STEPS.length - 1,
+          Math.floor((next / 100) * INFERENCE_STEPS.length)
+        );
+        setActiveStepIndex(stepIndex);
+        return next;
+      });
+    }, 850);
+
+    const elapsedTimer = window.setInterval(() => {
+      setElapsedSeconds((sec) => sec + 1);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(progressTimer);
+      window.clearInterval(elapsedTimer);
+    };
+  }, [isProcessing]);
 
   return (
-    <>
-      <style>{`
-        .tryon-container { min-height: 100vh; display: flex; flex-direction: column; padding: 14px; background: linear-gradient(179deg, rgba(5,5,13,1) 0%, rgba(15,16,30,1) 100%); color: #fff; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; animation: fadeIn 0.3s ease-in-out; }
-        .tryon-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-        .back-btn { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-weight: 600; transition: all 0.2s ease; }
-        .back-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-1px); }
-        .tryon-title { font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
-        .tryon-content { display: grid; gap: 12px; flex: 1; overflow-y: auto; padding-right: 4px; }
-        .outfit-info-card { border: 1px solid rgba(255,255,255,0.18); background: rgba(48,51,78,0.8); border-radius: 16px; padding: 12px; }
-        .outfit-info-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-        .outfit-details { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-        .outfit-detail { background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px; }
-        .detail-label { font-size: 11px; opacity: 0.8; }
-        .detail-value { font-size: 13px; font-weight: 600; }
-        .preview-area { border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; min-height: 220px; background: rgba(15,16,30,0.65); display: flex; align-items: center; justify-content: center; padding: 14px; }
-        .instruction-step { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-        .step-number { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #6f8fff; border-radius: 50%; color: #fff; font-weight: 700; }
-        .result-image { width: 100%; max-height: 300px; object-fit: cover; border-radius: 14px; border: 1px solid rgba(255,255,255,0.2); box-shadow:0 4px 20px rgba(0,0,0,0.5); margin-bottom: 10px; }
-        .action-buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
-        .action-btn { flex: 1 1 30%; min-width: 98px; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.2); background: rgba(34,39,72,0.75); color:#fff; font-weight:600; cursor:pointer; }
-        .action-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(41,201,255,0.18); }
-        .action-btn.primary { background: linear-gradient(120deg,#4e71f2,#6f8fff); border-color: rgba(111,143,255,0.9); }
-        .user-tryon-info { display:flex; align-items:center; gap:10px; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16); border-radius:14px; padding:10px; }
-        .user-avatar { width:44px;height:44px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.28); min-height:44px; }
-        .tryon-hint { margin-top:10px; background: rgba(25,30,55,0.7); border:1px solid rgba(111,143,255,0.2); padding:10px; border-radius:12px; font-size:13px; color:#d4e8ff; }
-        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-        @media (max-width: 540px) { .outfit-details { grid-template-columns: 1fr; } .action-buttons { flex-direction: column; } .action-btn { width: 100%; } }
-      `}</style>
-      <div className="tryon-container">
-      {/* Шапка */}
-      <header className="tryon-header">
-        <button className="back-btn" onClick={handleCancel}>
-          ← Отмена
+    <div className="tryon-page">
+      <header className="tryon-page__header">
+        <button className="tryon-page__back" onClick={() => navigate('/')}>
+          Назад
         </button>
-        <h1 className="tryon-title">Виртуальная примерка</h1>
-        <div></div> {/* Пустой элемент для выравнивания */}
+        <h1 className="tryon-page__title">Примерка</h1>
+        <button className="tryon-page__link" onClick={goToProfileWithNav}>
+          Профиль
+        </button>
       </header>
 
-      <div className="tryon-content">
-        {/* Информация об одежде */}
-        <div className="outfit-info-card">
-          <h3>Примеряемая одежда:</h3>
-          <div className="outfit-details">
-            <div className="outfit-detail">
-              <span className="detail-label">Бренд:</span>
-              <span className="detail-value">{outfit.brand}</span>
-            </div>
-            <div className="outfit-detail">
-              <span className="detail-label">Тип:</span>
-              <span className="detail-value">{outfit.type}</span>
-            </div>
-            <div className="outfit-detail">
-              <span className="detail-label">Цена:</span>
-              <span className="detail-value">{outfit.price}</span>
-            </div>
+      <div className="tryon-page__content">
+        <section className="tryon-card tryon-card--meta">
+          <div className="tryon-meta">
+            <span className="tryon-meta__label">Бренд</span>
+            <span className="tryon-meta__value">{outfit.brand}</span>
           </div>
-        </div>
-
-        {/* Область предпросмотра */}
-        <div className="preview-area">
-          {isProcessing ? (
-            <div className="processing">
-              <div className="spinner"></div>
-              <p>Идет примерка...</p>
-            </div>
-          ) : result ? (
-            <div className="result">
-              <img src={result.image} alt="Результат примерки" className="result-image" />
-              <p className="result-message">{result.message}</p>
-              <div className="result-actions">
-                <button className="save-btn" onClick={handleSaveResult}>
-                  Сохранить
-                </button>
-                <button className="share-btn" onClick={handleShare}>
-                  Поделиться
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="instructions">
-              <div className="instruction-step">
-                <span className="step-number">1</span>
-                <p>Сделайте фото или выберите из галереи</p>
-              </div>
-              <div className="instruction-step">
-                <span className="step-number">2</span>
-                <p>Система автоматически примерит одежду</p>
-              </div>
-              <div className="instruction-step">
-                <span className="step-number">3</span>
-                <p>Оцените результат и поделитесь с друзьями</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Кнопки действий */}
-        <div className="action-buttons">
-          {!result && (
-            <>
-              <button className="action-btn secondary">
-                <span className="btn-icon">📁</span>
-                <span>Выбрать фото</span>
-              </button>
-              <button className="action-btn primary" onClick={handleTryOn}>
-                <span className="btn-icon">🎬</span>
-                <span>Сделать фото</span>
-              </button>
-              <button className="action-btn secondary">
-                <span className="btn-icon">📸</span>
-                <span>Из галереи</span>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Информация о пользователе */}
-        <div className="user-tryon-info">
-          <img src={user?.avatar} alt="Аватар" className="user-avatar" />
-          <div className="user-info">
-            <h4>{user?.username || 'Пользователь'}</h4>
-            <p>Готов примерить {outfit.type.toLowerCase()}!</p>
+          <div className="tryon-meta">
+            <span className="tryon-meta__label">Тип</span>
+            <span className="tryon-meta__value">{outfit.type}</span>
           </div>
-        </div>
-      </div>
+          <div className="tryon-meta">
+            <span className="tryon-meta__label">Цена</span>
+            <span className="tryon-meta__value">{outfit.price}</span>
+          </div>
+        </section>
 
-      {/* Подсказка */}
-      <div className="tryon-hint">
-        💡 Совет: Используйте хорошее освещение для лучшего результата
+        <section className="tryon-grid">
+          <article className="tryon-card">
+            <div className="tryon-card__head">
+              <h2>Фото из профиля</h2>
+              <span className="tryon-badge">
+                {profileInfo.count > 0 ? `Основное ${profileInfo.index + 1}/${profileInfo.count}` : 'Не выбрано'}
+              </span>
+            </div>
+            {profileModelPhoto ? (
+              <img className="tryon-photo" src={profileModelPhoto} alt="Фото пользователя" />
+            ) : (
+              <div className="tryon-empty">Добавьте фото в профиле и отметьте его как основное</div>
+            )}
+          </article>
+
+          <article className="tryon-card">
+            <div className="tryon-card__head">
+              <h2>Одежда</h2>
+              <span className="tryon-badge tryon-badge--source">{clothSourceLabel}</span>
+            </div>
+            {clothPreview ? (
+              <img className="tryon-photo tryon-photo--cloth" src={clothPreview} alt="Фото одежды" />
+            ) : (
+              <div className="tryon-empty">Откройте примерку из ленты или загрузите фото одежды вручную</div>
+            )}
+          </article>
+        </section>
+
+        <section className="tryon-actions">
+          <button className="tryon-btn tryon-btn--secondary" onClick={goToProfileWithNav}>
+            Выбрать фото в профиле
+          </button>
+          <button className="tryon-btn tryon-btn--secondary" onClick={handlePickClothPhoto}>
+            Загрузить одежду
+          </button>
+          <button className="tryon-btn tryon-btn--primary" onClick={handleTryOn} disabled={isProcessing}>
+            {isProcessing ? 'Создаем образ...' : 'Запустить примерку'}
+          </button>
+        </section>
+
+        {error && <div className="tryon-alert tryon-alert--error">{error}</div>}
+
+        {isProcessing && (
+          <section className="tryon-card tryon-card--status">
+            <div className="tryon-loader" />
+            <p className="tryon-status-title">Создаем вашу примерку</p>
+            <p className="tryon-status-subtitle">
+              {INFERENCE_STEPS[activeStepIndex]} · {elapsedSeconds}с
+            </p>
+            <div className="tryon-progress">
+              <div className="tryon-progress__bar" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="tryon-steps">
+              {INFERENCE_STEPS.map((step, index) => (
+                <div
+                  key={step}
+                  className={`tryon-step ${index <= activeStepIndex ? 'is-active' : ''}`}
+                >
+                  {step}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {resultImage && !isProcessing && (
+          <section className="tryon-card tryon-card--result">
+            <h2>Результат примерки</h2>
+            <img className="tryon-result-image" src={resultImage} alt="Результат примерки" />
+            <div className="tryon-result-actions">
+              <button className="tryon-btn tryon-btn--secondary" onClick={handleSaveResult}>
+                Сохранить
+              </button>
+              <button className="tryon-btn tryon-btn--secondary" onClick={handleShare}>
+                Поделиться
+              </button>
+              <button className="tryon-btn tryon-btn--primary" onClick={() => setResultImage('')}>
+                Новая примерка
+              </button>
+            </div>
+          </section>
+        )}
+
+        <input
+          ref={clothInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleClothChange}
+        />
       </div>
     </div>
-    </>
   );
 };
 

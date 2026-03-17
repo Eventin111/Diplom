@@ -14,7 +14,7 @@ const toNumber = (value, fallback) => {
 export const appConfig = Object.freeze({
   appName: process.env.REACT_APP_NAME || 'Swipelt',
   apiBaseUrl: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000',
-  useMockData: toBoolean(process.env.REACT_APP_USE_MOCK_DATA, true),
+  useMockData: toBoolean(process.env.REACT_APP_USE_MOCK_DATA, false),
   mockDelayMs: toNumber(process.env.REACT_APP_MOCK_DELAY_MS, 200),
   authInitDelayMs: toNumber(process.env.REACT_APP_AUTH_INIT_DELAY_MS, 300),
   authStorageKeys: Object.freeze({
@@ -36,4 +36,3 @@ export const appConfig = Object.freeze({
 });
 
 export const getConfig = () => appConfig;
-

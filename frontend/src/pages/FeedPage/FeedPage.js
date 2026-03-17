@@ -1,15 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ProfilePage from '../ProfilePage/ProfilePage';
 import SearchPage from '../SearchPage/SearchPage';
-import WardrobePage from '../WardrobePage/WardrobePage';
 import ChatPage from '../ChatPage/ChatPage';
+import MusicTicker from '../../components/MusicTicker/MusicTicker';
+import feedIcon from '../../assets/icons/feed.png';
+import searchIcon from '../../assets/icons/search.png';
+import profileIcon from '../../assets/icons/profile.png';
+import commentsIcon from '../../assets/icons/comments.png';
+import likeIcon from '../../assets/icons/like.png';
+import downloadIcon from '../../assets/icons/download.png';
+import wardrobeIcon from '../../assets/icons/wardrobe.png';
 import './FeedPage.css';
 
 const FeedPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
   
   // Состояние для показа сплеша после входа
   const [showEntrySplash, setShowEntrySplash] = useState(true);
@@ -52,12 +58,17 @@ const FeedPage = () => {
   
   // Загружаем настройки темы
   useEffect(() => {
-    const savedTheme = localStorage.getItem('appTheme');
-    if (savedTheme) {
-      document.documentElement.className = `theme-${savedTheme}`;
-      setSettings(prev => ({ ...prev, theme: savedTheme }));
-    }
+    const savedTheme = localStorage.getItem('appTheme') || 'dark';
+    const root = document.documentElement;
+    root.classList.remove('theme-dark', 'theme-light');
+    root.classList.add(`theme-${savedTheme}`);
+    localStorage.setItem('appTheme', savedTheme);
+    setSettings(prev => ({ ...prev, theme: savedTheme }));
   }, []);
+
+  const COMMON_AUDIO_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3';
+  const COMMON_TRACK_TITLE = 'Calm Ambient Flow';
+  const COMMON_TRACK_SOURCE = 'SoundHelix';
 
   // ПОСТЫ С ФОТО
   const samplePosts = [
@@ -69,16 +80,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Алексей&background=ff0000&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?ixlib=rb-1.2.1&auto=format&fit=crop&w-800&q=80',
-        'https://images.unsplash.com/photo-1520975916090-3105956dac38?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Классический костюм от Giorgio Armani #офисныйстиль #деловойкостюм',
+      description: 'Классический костюм и рубашка для офиса #офисныйстиль #деловойкостюм',
       likes: 2450,
       comments: 320,
       shares: 45,
       tryOnCount: 124,
-      music: 'Модный бит - Fashion Beats',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#костюм', '#офис', '#деловойстиль'],
       outfit: {
         brand: 'Giorgio Armani',
@@ -95,15 +106,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Мария&background=ff3333&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Вечернее платье для особого случая 👗 #вечернийобраз #платье',
+      description: 'Подборка вечерних платьев для особого случая #вечернийобраз #платье',
       likes: 1890,
       comments: 210,
       shares: 32,
       tryOnCount: 89,
-      music: 'Original Sound - Maria Style',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#платье', '#вечер', '#образ'],
       outfit: {
         brand: 'Dolce & Gabbana',
@@ -120,15 +132,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Иван&background=0088ff&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1544441893-675973e31985?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1511994717241-7e3d81c6e3e6?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Спортивная одежда для активного отдыха 🏃‍♂️ #спорт #стиль #тренировки',
+      description: 'Спортивная коллекция для активного отдыха #спорт #стиль #тренировки',
       likes: 3250,
       comments: 450,
       shares: 120,
       tryOnCount: 210,
-      music: 'Workout Mix - Energy Beat',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#спорт', '#тренировки', '#активныйстиль'],
       outfit: {
         brand: 'Nike',
@@ -145,15 +158,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Елена&background=ff00aa&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1463100099107-aa0980c362e6?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Повседневный стиль от Zara для городских прогулок 🏙️ #повседневка #городскойстиль',
+      description: 'Капсула для города: обувь и базовые вещи #повседневка #городскойстиль',
       likes: 1560,
       comments: 189,
       shares: 45,
       tryOnCount: 98,
-      music: 'City Vibes - Urban Sounds',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#повседневка', '#зара', '#городскойстиль'],
       outfit: {
         brand: 'Zara',
@@ -170,15 +184,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Дмитрий&background=00aa00&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1552902865-b72c031ac5ea?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1554412933-514a83d2f3c8?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Классическое пальто для осенних вечеров 🍂 #пальто #классика #осень',
+      description: 'Верхняя одежда на осень: пальто и куртки #пальто #классика #осень',
       likes: 2780,
       comments: 320,
       shares: 67,
       tryOnCount: 145,
-      music: 'Classical Elegance - Timeless',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#пальто', '#классика', '#осень'],
       outfit: {
         brand: 'Burberry',
@@ -195,15 +210,16 @@ const FeedPage = () => {
         avatar: 'https://ui-avatars.com/api/?name=Анна&background=ff8800&color=fff'
       },
       photos: [
-        'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1525171254930-643fc658b64e?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
+        'https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?auto=format&fit=crop&w=900&q=85&fm=jpg',
+        'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
-      description: 'Бохо-стиль для свободных духом 🌼 #бохо #свободныйстиль #творчество',
+      description: 'Бохо-образы и легкие ткани для теплого сезона #бохо #свободныйстиль #творчество',
       likes: 1420,
       comments: 167,
       shares: 38,
       tryOnCount: 76,
-      music: 'Boho Dreams - Acoustic',
+      music: COMMON_TRACK_TITLE,
+      audioUrl: COMMON_AUDIO_URL,
       tags: ['#бохо', '#свободныйстиль', '#творчество'],
       outfit: {
         brand: 'Mango',
@@ -217,6 +233,24 @@ const FeedPage = () => {
   // Получаем текущий пост и текущее фото
   const currentPost = activeTab === 'feed' ? samplePosts[currentPostIndex] : null;
   const isFirstPhoto = currentPhotoIndex === 0;
+
+  useEffect(() => {
+    const requestedTab = location.state?.openTab;
+    if (!requestedTab) {
+      return;
+    }
+
+    const allowedTabs = ['feed', 'search', 'chat', 'profile'];
+    if (!allowedTabs.includes(requestedTab)) {
+      return;
+    }
+
+    setActiveTab(requestedTab);
+    if (requestedTab === 'feed') {
+      setCurrentPostIndex(0);
+      setCurrentPhotoIndex(0);
+    }
+  }, [location.state]);
 
   // Функции для навигации с анимацией
   const nextPhoto = () => {
@@ -330,7 +364,7 @@ const FeedPage = () => {
               if (currentPhotoIndex > 0) {
                 prevPhoto();
               } else if (isFirstPhoto) {
-                handleTryOn(currentPost.id);
+                handleTryOn(currentPost.id, currentPhotoIndex);
               }
             }
           } else {
@@ -378,7 +412,7 @@ const FeedPage = () => {
               if (currentPhotoIndex > 0) {
                 prevPhoto();
               } else if (isFirstPhoto) {
-                handleTryOn(currentPost.id);
+                handleTryOn(currentPost.id, currentPhotoIndex);
               }
               break;
             case 'arrowup':
@@ -404,7 +438,23 @@ const FeedPage = () => {
       };
 
       const handleWheel = (e) => {
-        if (activeTab === 'feed' && Math.abs(e.deltaY) > 30) {
+        if (activeTab !== 'feed') {
+          return;
+        }
+
+        if (Math.abs(e.deltaX) > 24 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          e.preventDefault();
+          if (e.deltaX > 0) {
+            nextPhoto();
+          } else if (currentPhotoIndex > 0) {
+            prevPhoto();
+          } else if (isFirstPhoto) {
+            handleTryOn(currentPost.id, currentPhotoIndex);
+          }
+          return;
+        }
+
+        if (Math.abs(e.deltaY) > 30) {
           e.preventDefault();
           if (e.deltaY > 0) {
             nextPost();
@@ -453,14 +503,17 @@ const FeedPage = () => {
     }
   };
 
-  const handleTryOn = (postId) => {
+  const handleTryOn = (postId, photoIndex = 0) => {
     const post = samplePosts.find(p => p.id === postId);
+    const clothPhoto = post?.photos?.[photoIndex] || post?.photos?.[0] || '';
     navigate('/try-on', { 
       state: { 
         postId, 
         outfit: post.outfit, 
         user: post.user,
-        photo: post.photos[0]
+        photo: clothPhoto,
+        clothPhoto,
+        autoStart: true
       } 
     });
   };
@@ -643,18 +696,6 @@ const FeedPage = () => {
 
                   <div className="photo-overlay"></div>
 
-                  {/* TikTok стиль: музыка в левом нижнем углу с диском */}
-                  <div className="music-info-tiktok">
-                    <div className="music-disc">
-                      <div className="disc-icon">🎵</div>
-                      <div className="disc-spinner"></div>
-                    </div>
-                    <div className="music-details">
-                      <div className="music-title">{post.music}</div>
-                      <div className="music-source">Original audio</div>
-                    </div>
-                  </div>
-
                   <div className="post-content-wrapper">
                     <div className="post-content">
                       <div className="post-header">
@@ -683,6 +724,13 @@ const FeedPage = () => {
                           ))}
                         </div>
                       </div>
+
+                      <MusicTicker
+                        title={post.music}
+                        source={COMMON_TRACK_SOURCE}
+                        audioUrl={post.audioUrl}
+                        isActive={currentPost.id === post.id && activeTab === 'feed'}
+                      />
 
                       <div className="outfit-info">
                         <div className="outfit-item">
@@ -713,7 +761,7 @@ const FeedPage = () => {
                     title="Лайк"
                   >
                     <span className="action-icon">
-                      {isLiked[post.id] ? '❤️' : '🤍'}
+                      <img src={likeIcon} alt="" className="action-icon-img" />
                     </span>
                     <span className="action-count">
                       {isLiked[post.id] ? post.likes + 1 : post.likes}
@@ -725,7 +773,9 @@ const FeedPage = () => {
                     onClick={() => handleComment(post.id)} 
                     title="Комментарии"
                   >
-                    <span className="action-icon">💬</span>
+                    <span className="action-icon">
+                      <img src={commentsIcon} alt="" className="action-icon-img" />
+                    </span>
                     <span className="action-count">{post.comments}</span>
                   </button>
 
@@ -734,17 +784,21 @@ const FeedPage = () => {
                     onClick={() => handleShare(post.id)} 
                     title="Поделиться"
                   >
-                    <span className="action-icon">📤</span>
+                    <span className="action-icon">
+                      <img src={downloadIcon} alt="" className="action-icon-img" />
+                    </span>
                     <span className="action-count">{post.shares}</span>
                   </button>
 
                   {currentPost.id === post.id && isFirstPhoto && (
                     <button 
                       className="action-btn try-on-action" 
-                      onClick={() => handleTryOn(post.id)} 
+                      onClick={() => handleTryOn(post.id, currentPhotoIndex)} 
                       title="Примерять эту одежду"
                     >
-                      <span className="action-icon">👕</span>
+                      <span className="action-icon">
+                        <img src={wardrobeIcon} alt="" className="action-icon-img" />
+                      </span>
                       <span className="action-text">Примерка</span>
                       <span className="action-count">{post.tryOnCount}</span>
                     </button>
@@ -782,7 +836,9 @@ const FeedPage = () => {
           onClick={() => handleTabChange('feed')}
           title="Лента"
         >
-          <span className="nav-icon">🏠</span>
+          <span className="nav-icon">
+            <img src={feedIcon} alt="" className="nav-icon-img" />
+          </span>
           <span className="nav-label">Лента</span>
         </button>
         <button 
@@ -790,18 +846,24 @@ const FeedPage = () => {
           onClick={() => handleTabChange('search')}
           title="Поиск"
         >
-          <span className="nav-icon">🔍</span>
+          <span className="nav-icon">
+            <img src={searchIcon} alt="" className="nav-icon-img" />
+          </span>
           <span className="nav-label">Поиск</span>
         </button>
         <button className="camera-btn" onClick={handleCamera} title="Новая примерка">
-          <span className="camera-icon">📷</span>
+          <span className="camera-icon">
+            <img src={wardrobeIcon} alt="" className="camera-icon-img" />
+          </span>
         </button>
         <button 
           className={`bottom-nav-btn ${activeTab === 'chat' ? 'active' : ''}`} 
           onClick={() => handleTabChange('chat')}
           title="Чаты"
         >
-          <span className="nav-icon">💬</span>
+          <span className="nav-icon">
+            <img src={commentsIcon} alt="" className="nav-icon-img" />
+          </span>
           <span className="nav-label">Чаты</span>
         </button>
         <button 
@@ -809,7 +871,9 @@ const FeedPage = () => {
           onClick={() => handleTabChange('profile')}
           title="Профиль"
         >
-          <span className="nav-icon">👤</span>
+          <span className="nav-icon">
+            <img src={profileIcon} alt="" className="nav-icon-img" />
+          </span>
           <span className="nav-label">Профиль</span>
         </button>
       </nav>

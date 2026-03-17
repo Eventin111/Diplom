@@ -814,6 +814,52 @@ input:checked + .slider:before {
   color: #ff6666;
 }
 
+.appearance-panel {
+  margin-top: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  padding: 14px;
+}
+
+.appearance-title {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.appearance-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.appearance-option {
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.appearance-option:hover {
+  border-color: rgba(255, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+.appearance-option.active {
+  border-color: rgba(255, 0, 0, 0.7);
+  background: linear-gradient(180deg, rgba(255, 0, 0, 0.16), rgba(255, 0, 0, 0.06));
+  box-shadow: 0 6px 16px rgba(255, 0, 0, 0.16);
+}
+
 
 /* Адаптивность */
 @media (max-width: 768px) {

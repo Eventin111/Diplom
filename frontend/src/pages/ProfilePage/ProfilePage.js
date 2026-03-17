@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import WardrobePage from '../WardrobePage/WardrobePage';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { user, logout, isAuthenticated, updateUserProfile } = useAuth();
 
   const isGuest = user?.isGuest;
+  const isStandaloneProfileRoute = location.pathname === '/profile';
   const [activeView, setActiveView] = useState('profile');
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('appTheme') || 'dark');
   
   const [tryOnPhotos, setTryOnPhotos] = useState(() => {
     const savedPhotos = localStorage.getItem('tryOnPhotos');
@@ -20,6 +24,7 @@ const ProfilePage = () => {
     return savedIndex ? parseInt(savedIndex) : 0;
   });
   const fileInputRef = useRef(null);
+  const avatarInputRef = useRef(null);
 
   if (!isAuthenticated) {
     navigate('/login');
@@ -110,18 +115,58 @@ const ProfilePage = () => {
     fileInputRef.current.click();
   };
 
-  useEffect(() => {
-    if (!document.documentElement.style.getPropertyValue('--bg-primary')) {
-      document.documentElement.style.setProperty('--bg-primary', '#0a0a0a');
-      document.documentElement.style.setProperty('--bg-secondary', '#1a1a1a');
-      document.documentElement.style.setProperty('--bg-tertiary', '#2a2a2a');
-      document.documentElement.style.setProperty('--card-bg', 'rgba(255, 255, 255, 0.05)');
-      document.documentElement.style.setProperty('--text-primary', '#ffffff');
-      document.documentElement.style.setProperty('--text-secondary', '#aaaaaa');
-      document.documentElement.style.setProperty('--border-color', 'rgba(255, 255, 255, 0.1)');
-      document.documentElement.style.setProperty('--accent-color', '#ff0000');
+  const triggerAvatarInput = () => {
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const avatarUrl = event.target?.result;
+      if (!avatarUrl) {
+        return;
+      }
+      updateUserProfile({ avatar: avatarUrl });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('appTheme') || 'dark';
+    const root = document.documentElement;
+    root.classList.remove('theme-dark', 'theme-light');
+    root.classList.add(`theme-${savedTheme}`);
+    localStorage.setItem('appTheme', savedTheme);
+    setThemeMode(savedTheme);
   }, []);
+
+  const handleThemeChange = (nextTheme) => {
+    if (!nextTheme || nextTheme === themeMode) {
+      return;
+    }
+
+    const root = document.documentElement;
+    root.classList.remove('theme-dark', 'theme-light');
+    root.classList.add(`theme-${nextTheme}`);
+    localStorage.setItem('appTheme', nextTheme);
+    setThemeMode(nextTheme);
+
+    const settingsRaw = localStorage.getItem('appSettings');
+    if (settingsRaw) {
+      try {
+        const parsed = JSON.parse(settingsRaw);
+        localStorage.setItem('appSettings', JSON.stringify({ ...parsed, theme: nextTheme }));
+      } catch (error) {
+        localStorage.setItem('appSettings', JSON.stringify({ theme: nextTheme, showInstructions: true }));
+      }
+    }
+  };
 
   if (activeView === 'wardrobe') {
     return (
@@ -145,7 +190,13 @@ const ProfilePage = () => {
     <div className="profile-container">
       {/* Шапка профиля БЕЗ кнопки "Назад" */}
       <header className="profile-header">
-        <div style={{ width: '20px' }}></div>
+        {isStandaloneProfileRoute ? (
+          <button className="back-btn" onClick={() => navigate('/')}>
+            ← Лента
+          </button>
+        ) : (
+          <div style={{ width: '20px' }}></div>
+        )}
         <h1 className="profile-title">Профиль</h1>
         {!isGuest ? (
           <button className="logout-btn" onClick={handleLogout}>
@@ -183,7 +234,16 @@ const ProfilePage = () => {
                   alt="Аватар" 
                   className="profile-avatar"
                 />
-                <button className="edit-avatar-btn">✎</button>
+                <button className="edit-avatar-btn" onClick={triggerAvatarInput} title="Сменить аватар">
+                  ✎
+                </button>
+                <input
+                  type="file"
+                  ref={avatarInputRef}
+                  onChange={handleAvatarUpload}
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                />
               </div>
               
               <div className="user-details">
@@ -322,10 +382,10 @@ const ProfilePage = () => {
                   <span>Мой гардероб</span>
                   <span>→</span>
                 </button>
-                <button className="setting-item">
+                <button className="setting-item" onClick={() => setIsAppearanceOpen((prev) => !prev)}>
                   <span>👁️</span>
                   <span>Вид</span>
-                  <span>→</span>
+                  <span>{isAppearanceOpen ? '↓' : '→'}</span>
                 </button>
                 <button className="setting-item">
                   <span>🔔</span>
@@ -346,6 +406,28 @@ const ProfilePage = () => {
               <span>→</span>
             </button>
           </div>
+
+          {!isGuest && isAppearanceOpen && (
+            <div className="appearance-panel">
+              <p className="appearance-title">Тема приложения</p>
+              <div className="appearance-options">
+                <button
+                  className={`appearance-option ${themeMode === 'dark' ? 'active' : ''}`}
+                  onClick={() => handleThemeChange('dark')}
+                >
+                  <span>🌙</span>
+                  <span>Темная</span>
+                </button>
+                <button
+                  className={`appearance-option ${themeMode === 'light' ? 'active' : ''}`}
+                  onClick={() => handleThemeChange('light')}
+                >
+                  <span>☀️</span>
+                  <span>Светлая</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

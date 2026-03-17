@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const authKeys = appConfig.authStorageKeys;
 
   useEffect(() => {
     const initAuth = async () => {
@@ -63,6 +64,37 @@ export const AuthProvider = ({ children }) => {
     return session.user;
   };
 
+  const updateUserProfile = (partialUser) => {
+    if (!user) {
+      return null;
+    }
+
+    const nextUser = { ...user, ...partialUser };
+    setUser(nextUser);
+
+    localStorage.setItem(authKeys.user, JSON.stringify(nextUser));
+
+    const rawRegisteredUsers = localStorage.getItem(authKeys.registeredUsers);
+    if (rawRegisteredUsers) {
+      try {
+        const parsed = JSON.parse(rawRegisteredUsers);
+        if (Array.isArray(parsed)) {
+          const updatedUsers = parsed.map((item) => {
+            if (String(item.email || '').toLowerCase() === String(nextUser.email || '').toLowerCase()) {
+              return { ...item, ...nextUser };
+            }
+            return item;
+          });
+          localStorage.setItem(authKeys.registeredUsers, JSON.stringify(updatedUsers));
+        }
+      } catch (error) {
+        // ignore malformed storage
+      }
+    }
+
+    return nextUser;
+  };
+
   return (
     <AuthContext.Provider value={{ 
       isAuthenticated, 
@@ -71,7 +103,8 @@ export const AuthProvider = ({ children }) => {
       login, 
       logout, 
       register,
-      clearAuth
+      clearAuth,
+      updateUserProfile
     }}>
       {children}
     </AuthContext.Provider>
