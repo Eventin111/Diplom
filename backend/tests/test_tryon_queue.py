@@ -6,6 +6,7 @@ import sys
 class FakeRedis:
     def __init__(self):
         self.items = []
+        self.storage = {}
 
     async def lpush(self, queue_name, payload):
         self.items.insert(0, (queue_name, payload))
@@ -16,6 +17,15 @@ class FakeRedis:
         queued_name, payload = self.items.pop()
         assert queued_name == queue_name
         return queue_name, payload
+
+    async def set(self, key, value, ex=None, nx=False):
+        if nx and key in self.storage:
+            return False
+        self.storage[key] = value
+        return True
+
+    async def delete(self, key):
+        self.storage.pop(key, None)
 
 
 def reload_tryon_queue_module():
@@ -37,6 +47,7 @@ def test_build_tryon_task_payload_contains_expected_fields():
         num_steps=10,
         num_samples=1,
         seed=42,
+        attempt=1,
     )
 
     assert payload["session_id"] == 1
@@ -44,6 +55,7 @@ def test_build_tryon_task_payload_contains_expected_fields():
     assert payload["avatar_media_id"] == 3
     assert payload["cloth_media_id"] == 4
     assert payload["model_type"] == "hd"
+    assert payload["attempt"] == 1
 
 
 def test_enqueue_and_dequeue_tryon_task_roundtrip(monkeypatch):
@@ -71,3 +83,18 @@ def test_enqueue_and_dequeue_tryon_task_roundtrip(monkeypatch):
     restored = asyncio.run(scenario())
 
     assert restored == payload
+
+
+def test_processing_lock_acquire_and_release(monkeypatch):
+    module = reload_tryon_queue_module()
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(module, "get_redis_client", lambda: fake_redis)
+
+    async def scenario():
+        first = await module.acquire_tryon_processing_lock(99)
+        second = await module.acquire_tryon_processing_lock(99)
+        await module.release_tryon_processing_lock(99)
+        third = await module.acquire_tryon_processing_lock(99)
+        return first, second, third
+
+    assert asyncio.run(scenario()) == (True, False, True)

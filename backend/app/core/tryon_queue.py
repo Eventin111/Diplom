@@ -19,6 +19,7 @@ def build_tryon_task_payload(
     num_steps: int,
     num_samples: int,
     seed: int,
+    attempt: int = 0,
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -31,6 +32,7 @@ def build_tryon_task_payload(
         "num_steps": num_steps,
         "num_samples": num_samples,
         "seed": seed,
+        "attempt": attempt,
     }
 
 
@@ -62,3 +64,22 @@ async def get_tryon_queue_health() -> dict[str, Any]:
         "queue_name": settings.TRYON_QUEUE_NAME,
         "queue_length": queue_length,
     }
+
+
+def build_tryon_processing_lock_key(session_id: int) -> str:
+    return f"tryon:processing:{session_id}"
+
+
+async def acquire_tryon_processing_lock(session_id: int) -> bool:
+    return bool(
+        await get_redis_client().set(
+            build_tryon_processing_lock_key(session_id),
+            "1",
+            ex=settings.TRYON_PROCESSING_LOCK_TTL_SECONDS,
+            nx=True,
+        )
+    )
+
+
+async def release_tryon_processing_lock(session_id: int) -> None:
+    await get_redis_client().delete(build_tryon_processing_lock_key(session_id))

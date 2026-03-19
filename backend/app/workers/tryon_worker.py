@@ -6,7 +6,6 @@ import io
 import logging
 import os
 import uuid
-from pathlib import Path
 from typing import Optional
 
 from PIL import Image
@@ -22,7 +21,12 @@ from app.core.tryon_cache import (
     cache_tryon_result,
     get_cached_tryon_result,
 )
-from app.core.tryon_queue import dequeue_tryon_task
+from app.core.tryon_queue import (
+    acquire_tryon_processing_lock,
+    dequeue_tryon_task,
+    enqueue_tryon_task,
+    release_tryon_processing_lock,
+)
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
@@ -65,30 +69,35 @@ def _build_result_storage_key(user_id: int, filename: str = "result.png") -> str
 async def process_tryon_task(task: dict[str, object]) -> None:
     session_id = int(task["session_id"])
     user_id = int(task["user_id"])
+    attempt = int(task.get("attempt", 0))
     tryon_repo = TryOnRepository()
     media_repo = MediaRepository()
     use_case = TryOnUseCase(get_ootd_service())
 
-    async with AsyncSessionLocal() as db:
-        session = await tryon_repo.get(db, session_id)
-        if session is None:
-            logger.warning("Try-on session %s not found, skipping task", session_id)
-            return
+    if not await acquire_tryon_processing_lock(session_id):
+        logger.info("Try-on session %s is already being processed, skipping duplicate task", session_id)
+        return
 
-        avatar_media = await media_repo.get(db, int(task["avatar_media_id"]))
-        cloth_media = await media_repo.get(db, int(task["cloth_media_id"]))
-        if avatar_media is None or cloth_media is None:
-            await tryon_repo.update_status(
-                db,
-                session_id,
-                TryOnStatus.FAILED,
-                error_text="Input media not found for try-on task",
-            )
-            return
+    try:
+        async with AsyncSessionLocal() as db:
+            session = await tryon_repo.get(db, session_id)
+            if session is None:
+                logger.warning("Try-on session %s not found, skipping task", session_id)
+                return
 
-        await tryon_repo.update_status(db, session_id, TryOnStatus.PROCESSING)
+            avatar_media = await media_repo.get(db, int(task["avatar_media_id"]))
+            cloth_media = await media_repo.get(db, int(task["cloth_media_id"]))
+            if avatar_media is None or cloth_media is None:
+                await tryon_repo.update_status(
+                    db,
+                    session_id,
+                    TryOnStatus.FAILED,
+                    error_text="Input media not found for try-on task",
+                )
+                return
 
-        try:
+            await tryon_repo.update_status(db, session_id, TryOnStatus.PROCESSING)
+
             model_bytes = _load_media_bytes(avatar_media.storage_key)
             cloth_bytes = _load_media_bytes(cloth_media.storage_key)
 
@@ -150,14 +159,29 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 results=result_urls,
                 result_media_id=result_media_id,
             )
-        except Exception as exc:
-            logger.exception("Try-on worker failed for session %s", session_id)
+    except Exception as exc:
+        logger.exception("Try-on worker failed for session %s (attempt %s)", session_id, attempt)
+        if attempt < settings.TRYON_QUEUE_MAX_RETRIES:
+            retry_task = dict(task)
+            retry_task["attempt"] = attempt + 1
+            await enqueue_tryon_task(retry_task)
+            logger.info(
+                "Requeued try-on session %s for retry %s of %s",
+                session_id,
+                attempt + 1,
+                settings.TRYON_QUEUE_MAX_RETRIES,
+            )
+            return
+
+        async with AsyncSessionLocal() as db:
             await tryon_repo.update_status(
                 db,
                 session_id,
                 TryOnStatus.FAILED,
                 error_text=str(exc),
             )
+    finally:
+        await release_tryon_processing_lock(session_id)
 
 
 async def run_tryon_worker() -> None:
