@@ -6,13 +6,13 @@ Presentation Layer: создание сессий, постановка зада
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
-from app.core.db import get_db
-from app.core.security import get_current_user
+from app.core.db import AsyncSessionLocal, get_db
+from app.core.security import get_current_user, get_user_by_token
 from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
 from app.core.tryon_queue import (
     build_tryon_task_payload,
@@ -25,6 +25,7 @@ from app.repositories.tryon_repo import TryOnRepository
 from app.schemas.media import MediaType
 from app.schemas.tryon import TryOnResult, TryOnSessionCreate, TryOnSessionResponse, TryOnStatus
 from app.schemas.user import UserResponse
+import asyncio
 
 router = APIRouter()
 
@@ -183,6 +184,51 @@ async def get_tryon_session(
         session=TryOnSessionResponse.from_orm(session),
         result_image_url=_build_media_file_url(session.result_media_id),
     )
+
+
+@router.websocket("/sessions/{session_id}/ws")
+async def tryon_session_websocket(websocket: WebSocket, session_id: int):
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+        return
+
+    await websocket.accept()
+
+    try:
+        async with AsyncSessionLocal() as db:
+            current_user = await get_user_by_token(token=token, db=db)
+            tryon_repo = TryOnRepository()
+            last_payload = None
+
+            while True:
+                session = await tryon_repo.get(db, session_id)
+                if session is None or session.user_id != current_user.id:
+                    await websocket.send_json({"error": "Try-on session not found"})
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+
+                payload = {
+                    "session_id": session.id,
+                    "status": session.status,
+                    "result_media_id": session.result_media_id,
+                    "result_image_url": _build_media_file_url(session.result_media_id),
+                    "error_text": session.error_text,
+                }
+                if payload != last_payload:
+                    await websocket.send_json(payload)
+                    last_payload = payload
+
+                if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED}:
+                    await websocket.close()
+                    return
+
+                await asyncio.sleep(1)
+                await db.refresh(session)
+    except HTTPException:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
+    except WebSocketDisconnect:
+        return
 
 
 @router.get("/health")
