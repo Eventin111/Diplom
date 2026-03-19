@@ -5,7 +5,6 @@ Presentation Layer: создание сессий, постановка зада
 
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,12 +16,11 @@ from app.core.security import get_current_user, get_user_by_token
 from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
 from app.core.tryon_cleanup import run_tryon_cleanup
 from app.core.tryon_rate_limit import enforce_tryon_rate_limit
+from app.core.tryon_recovery import run_tryon_recovery
 from app.core.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
     get_tryon_dead_letters,
-    get_tryon_task_snapshot,
-    has_tryon_processing_lock,
     get_tryon_processing_lock_count,
     get_tryon_queue_health,
     requeue_tryon_dead_letter,
@@ -320,36 +318,10 @@ async def tryon_system_metrics(
 @router.post("/recovery/stale")
 async def recover_stale_tryon_sessions(
     current_user: UserResponse = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    tryon_repo = TryOnRepository()
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.TRYON_STALE_PROCESSING_THRESHOLD_SECONDS)
-    stale_sessions = await tryon_repo.get_stale_processing_sessions(db, older_than=cutoff)
-
-    recovered_session_ids = []
-    skipped = []
-
-    for session in stale_sessions:
-        if await has_tryon_processing_lock(session.id):
-            skipped.append({"session_id": session.id, "reason": "processing lock is still active"})
-            continue
-
-        task_snapshot = await get_tryon_task_snapshot(session.id)
-        if task_snapshot is None:
-            skipped.append({"session_id": session.id, "reason": "task snapshot not found"})
-            continue
-
-        task_snapshot["attempt"] = 0
-        await tryon_repo.update_status(db, session.id, TryOnStatus.QUEUED, error_text=None)
-        await enqueue_tryon_task(task_snapshot)
-        recovered_session_ids.append(session.id)
-
-    return {
-        "recovered_session_ids": recovered_session_ids,
-        "skipped": skipped,
-        "stale_threshold_seconds": settings.TRYON_STALE_PROCESSING_THRESHOLD_SECONDS,
-        "requested_by_user_id": current_user.id,
-    }
+    payload = await run_tryon_recovery(force=True)
+    payload["requested_by_user_id"] = current_user.id
+    return payload
 
 
 @router.post("/cleanup/run")

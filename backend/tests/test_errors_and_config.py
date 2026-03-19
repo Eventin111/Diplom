@@ -103,9 +103,11 @@ def test_config_exposes_tryon_cleanup_settings(monkeypatch):
     monkeypatch.setenv("TRYON_CLEANUP_INTERVAL_SECONDS", "600")
     monkeypatch.setenv("TRYON_CLEANUP_BATCH_SIZE", "25")
     monkeypatch.setenv("TRYON_DEAD_LETTER_MAX_ITEMS", "50")
+    monkeypatch.setenv("TRYON_RECOVERY_INTERVAL_SECONDS", "120")
     config = reload_config_module()
 
     assert config.settings.TRYON_RETENTION_DAYS == 14
     assert config.settings.TRYON_CLEANUP_INTERVAL_SECONDS == 600
     assert config.settings.TRYON_CLEANUP_BATCH_SIZE == 25
     assert config.settings.TRYON_DEAD_LETTER_MAX_ITEMS == 50
+    assert config.settings.TRYON_RECOVERY_INTERVAL_SECONDS == 120
