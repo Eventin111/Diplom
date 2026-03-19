@@ -67,6 +67,28 @@ class TryOnUseCase:
         if request.num_samples < 1 or request.num_samples > 10:
             raise ValueError("num_samples должен быть в диапазоне [1, 10]")
     
+    def validate_payload(
+        self,
+        *,
+        model_type: str,
+        category: int,
+        scale: float,
+        num_steps: int,
+        num_samples: int,
+    ) -> None:
+        self.validate(
+            TryOnRequest(
+                model_image=Image.new("RGB", (1, 1), "white"),
+                cloth_image=Image.new("RGB", (1, 1), "white"),
+                model_type=model_type,
+                category=category,
+                scale=scale,
+                num_steps=num_steps,
+                num_samples=num_samples,
+                seed=-1,
+            )
+        )
+
     def _prepare_image(self, img: Image.Image) -> Image.Image:
         """
         Подготовка изображения к обработке.

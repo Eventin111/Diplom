@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.models.media import MediaAsset
 from app.schemas.media import MediaCreate, MediaType
+from app.core.local_media import build_local_media_path
 from app.core.s3 import s3_client
 from app.core.image_processor import ImageProcessor
 from app.core.config import settings
@@ -59,6 +60,9 @@ class MediaRepository(BaseRepository[MediaAsset]):
         )
         
         media = await self.create(db, obj_in=media_data, owner_user_id=owner_user_id)
+        local_file_path = build_local_media_path(file_key)
+        local_file_path.parent.mkdir(parents=True, exist_ok=True)
+        local_file_path.write_bytes(file_content)
         
         # Затем пробуем загрузить в S3 (если доступен)
         try:

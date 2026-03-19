@@ -84,6 +84,6 @@ def test_config_exposes_project_level_sections(monkeypatch):
     monkeypatch.setenv("ML_DEVICE", "cpu")
     config = reload_config_module()
 
-    assert config.project_config.root_dir.name == "Diplom"
+    assert config.project_config.root_dir.name == "SwipeIt"
     assert config.project_config.frontend.api_base_url == "http://localhost:4173"
     assert config.project_config.ml.device == "cpu"
