@@ -24,6 +24,7 @@ class BackendSettings(BaseSettings):
     S3_PUBLIC_URL: Optional[str] = None
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    TRYON_CACHE_TTL_SECONDS: int = 86400
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

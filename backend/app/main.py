@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.db import Base, engine
+from app.core.redis_client import close_redis_client
 from app.api.routes import api_router
 from app.core.errors import setup_exception_handlers
 from app import models  # noqa: F401
@@ -68,7 +69,10 @@ async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await seed_demo_feed()
-    yield
+    try:
+        yield
+    finally:
+        await close_redis_client()
 
 
 app = FastAPI(title="SwipeIt Backend (MVP)", lifespan=lifespan)

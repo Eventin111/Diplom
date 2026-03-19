@@ -16,6 +16,11 @@ from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.application.dto.tryon_dto import TryOnRequest
 from app.core.db import get_db
 from app.core.security import get_current_user
+from app.core.tryon_cache import (
+    build_tryon_cache_key,
+    cache_tryon_result,
+    get_cached_tryon_result,
+)
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
@@ -106,6 +111,34 @@ async def try_on(
         user_id=current_user.id,
     )
     await tryon_repo.update_status(db, session.id, TryOnStatus.PROCESSING)
+
+    cache_key = build_tryon_cache_key(
+        model_bytes=model_bytes,
+        cloth_bytes=cloth_bytes,
+        model_type=model_type,
+        category=category,
+        scale=scale,
+        num_steps=num_steps,
+        num_samples=num_samples,
+        seed=seed,
+    )
+    cached_result = await get_cached_tryon_result(cache_key)
+    if cached_result and cached_result.get("results"):
+        result_media_id = cached_result.get("result_media_id")
+        await tryon_repo.update_status(
+            db,
+            session.id,
+            TryOnStatus.COMPLETED,
+            result_media_id=result_media_id,
+        )
+        return {
+            "success": True,
+            "results": cached_result["results"],
+            "count": len(cached_result["results"]),
+            "session_id": session.id,
+            "result_media_id": result_media_id,
+            "cached": True,
+        }
     
     # Создание DTO запроса
     request = TryOnRequest(
@@ -154,12 +187,18 @@ async def try_on(
             TryOnStatus.COMPLETED,
             result_media_id=result_media_id,
         )
+        await cache_tryon_result(
+            cache_key,
+            results=result_urls,
+            result_media_id=result_media_id,
+        )
         return {
             "success": result.success,
             "results": result_urls,
             "count": result.count,
             "session_id": session.id,
             "result_media_id": result_media_id,
+            "cached": False,
         }
     except ValueError as e:
         # Ошибки валидации
