@@ -59,10 +59,13 @@ async def get_tryon_queue_health() -> dict[str, Any]:
     redis_client = get_redis_client()
     redis_ok = bool(await redis_client.ping())
     queue_length = int(await redis_client.llen(settings.TRYON_QUEUE_NAME))
+    dead_letter_queue_length = int(await redis_client.llen(settings.TRYON_DEAD_LETTER_QUEUE_NAME))
     return {
         "redis_ok": redis_ok,
         "queue_name": settings.TRYON_QUEUE_NAME,
         "queue_length": queue_length,
+        "dead_letter_queue_name": settings.TRYON_DEAD_LETTER_QUEUE_NAME,
+        "dead_letter_queue_length": dead_letter_queue_length,
     }
 
 
@@ -97,3 +100,24 @@ async def get_tryon_processing_lock_count() -> int:
             break
 
     return count
+
+
+async def enqueue_tryon_dead_letter(task: dict[str, Any], error_text: str) -> None:
+    payload = {
+        "task": task,
+        "error_text": error_text,
+    }
+    await get_redis_client().lpush(
+        settings.TRYON_DEAD_LETTER_QUEUE_NAME,
+        json.dumps(payload, separators=(",", ":")),
+    )
+
+
+async def get_tryon_dead_letters(limit: int = 20) -> list[dict[str, Any]]:
+    raw_items = await get_redis_client().lrange(settings.TRYON_DEAD_LETTER_QUEUE_NAME, 0, max(limit - 1, 0))
+    items: list[dict[str, Any]] = []
+    for raw_item in raw_items:
+        payload = json.loads(raw_item)
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items

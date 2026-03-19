@@ -17,6 +17,7 @@ from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
 from app.core.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
+    get_tryon_dead_letters,
     get_tryon_processing_lock_count,
     get_tryon_queue_health,
 )
@@ -244,6 +245,20 @@ async def queue_health_check():
         return await get_tryon_queue_health()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Try-on queue unavailable: {str(exc)}")
+
+
+@router.get("/queue/dead-letter")
+async def tryon_dead_letter_queue(
+    limit: int = 20,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    try:
+        return {
+            "dead_letters": await get_tryon_dead_letters(limit=limit),
+            "requested_by_user_id": current_user.id,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Try-on dead-letter queue unavailable: {str(exc)}")
 
 
 @router.get("/system/metrics")

@@ -24,6 +24,7 @@ from app.core.tryon_cache import (
 from app.core.tryon_queue import (
     acquire_tryon_processing_lock,
     dequeue_tryon_task,
+    enqueue_tryon_dead_letter,
     enqueue_tryon_task,
     release_tryon_processing_lock,
 )
@@ -173,6 +174,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
             )
             return
 
+        await enqueue_tryon_dead_letter(dict(task), str(exc))
         async with AsyncSessionLocal() as db:
             await tryon_repo.update_status(
                 db,
