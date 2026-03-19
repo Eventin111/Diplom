@@ -31,10 +31,11 @@ from app.core.tryon_queue import (
     release_tryon_processing_lock,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
+from app.repositories.tryon_event_repo import TryOnEventRepository
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
 from app.schemas.media import MediaType
-from app.schemas.tryon import TryOnStatus
+from app.schemas.tryon import TryOnEventType, TryOnStatus
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
     user_id = int(task["user_id"])
     attempt = int(task.get("attempt", 0))
     tryon_repo = TryOnRepository()
+    event_repo = TryOnEventRepository()
     media_repo = MediaRepository()
     use_case = TryOnUseCase(get_ootd_service())
 
@@ -97,9 +99,24 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                     TryOnStatus.FAILED,
                     error_text="Input media not found for try-on task",
                 )
+                await event_repo.create_event(
+                    db,
+                    session_id=session_id,
+                    event_type=TryOnEventType.FAILED,
+                    attempt=attempt,
+                    error_text="Input media not found for try-on task",
+                    details="Worker could not find input media",
+                )
                 return
 
             await tryon_repo.update_status(db, session_id, TryOnStatus.PROCESSING)
+            await event_repo.create_event(
+                db,
+                session_id=session_id,
+                event_type=TryOnEventType.PROCESSING,
+                attempt=attempt,
+                details="Worker started processing try-on task",
+            )
 
             model_bytes = _load_media_bytes(avatar_media.storage_key)
             cloth_bytes = _load_media_bytes(cloth_media.storage_key)
@@ -121,6 +138,13 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                     session_id,
                     TryOnStatus.COMPLETED,
                     result_media_id=int(cached_result["result_media_id"]),
+                )
+                await event_repo.create_event(
+                    db,
+                    session_id=session_id,
+                    event_type=TryOnEventType.COMPLETED,
+                    attempt=attempt,
+                    details="Worker used cached try-on result",
                 )
                 return
 
@@ -157,6 +181,13 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 TryOnStatus.COMPLETED,
                 result_media_id=result_media_id,
             )
+            await event_repo.create_event(
+                db,
+                session_id=session_id,
+                event_type=TryOnEventType.COMPLETED,
+                attempt=attempt,
+                details="Worker completed try-on task",
+            )
             await cache_tryon_result(
                 cache_key,
                 results=result_urls,
@@ -168,6 +199,15 @@ async def process_tryon_task(task: dict[str, object]) -> None:
             retry_task = dict(task)
             retry_task["attempt"] = attempt + 1
             await enqueue_tryon_task(retry_task)
+            async with AsyncSessionLocal() as db:
+                await event_repo.create_event(
+                    db,
+                    session_id=session_id,
+                    event_type=TryOnEventType.RETRY,
+                    attempt=attempt + 1,
+                    error_text=str(exc),
+                    details="Requeued try-on task for retry",
+                )
             logger.info(
                 "Requeued try-on session %s for retry %s of %s",
                 session_id,
@@ -178,11 +218,27 @@ async def process_tryon_task(task: dict[str, object]) -> None:
 
         await enqueue_tryon_dead_letter(dict(task), str(exc))
         async with AsyncSessionLocal() as db:
+            await event_repo.create_event(
+                db,
+                session_id=session_id,
+                event_type=TryOnEventType.DEAD_LETTERED,
+                attempt=attempt,
+                error_text=str(exc),
+                details="Moved try-on task to dead-letter queue",
+            )
             await tryon_repo.update_status(
                 db,
                 session_id,
                 TryOnStatus.FAILED,
                 error_text=str(exc),
+            )
+            await event_repo.create_event(
+                db,
+                session_id=session_id,
+                event_type=TryOnEventType.FAILED,
+                attempt=attempt,
+                error_text=str(exc),
+                details="Worker marked try-on session as failed",
             )
     finally:
         await release_tryon_processing_lock(session_id)

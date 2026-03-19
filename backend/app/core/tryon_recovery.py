@@ -10,8 +10,9 @@ from app.core.tryon_queue import (
     get_tryon_task_snapshot,
     has_tryon_processing_lock,
 )
+from app.repositories.tryon_event_repo import TryOnEventRepository
 from app.repositories.tryon_repo import TryOnRepository
-from app.schemas.tryon import TryOnStatus
+from app.schemas.tryon import TryOnEventType, TryOnStatus
 
 
 _last_recovery_run_at = 0.0
@@ -19,6 +20,7 @@ _last_recovery_run_at = 0.0
 
 async def run_tryon_recovery(*, force: bool = False) -> dict[str, object]:
     tryon_repo = TryOnRepository()
+    event_repo = TryOnEventRepository()
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.TRYON_STALE_PROCESSING_THRESHOLD_SECONDS)
 
     async with AsyncSessionLocal() as db:
@@ -40,6 +42,13 @@ async def run_tryon_recovery(*, force: bool = False) -> dict[str, object]:
             task_snapshot["attempt"] = 0
             await tryon_repo.update_status(db, session.id, TryOnStatus.QUEUED, error_text=None)
             await enqueue_tryon_task(task_snapshot)
+            await event_repo.create_event(
+                db,
+                session_id=session.id,
+                event_type=TryOnEventType.RECOVERED,
+                attempt=0,
+                details="Recovered stale processing session",
+            )
             recovered_session_ids.append(session.id)
 
     return {

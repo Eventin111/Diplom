@@ -4,3 +4,4 @@ from .garment import Garment
 from .feed import FeedItem
 from .likes import Like
 from .tryon import TryOnSession
+from .tryon_event import TryOnEvent

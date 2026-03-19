@@ -26,10 +26,11 @@ from app.core.tryon_queue import (
     requeue_tryon_dead_letter,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
+from app.repositories.tryon_event_repo import TryOnEventRepository
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
 from app.schemas.media import MediaType
-from app.schemas.tryon import TryOnResult, TryOnSessionCreate, TryOnSessionResponse, TryOnStatus
+from app.schemas.tryon import TryOnEventType, TryOnResult, TryOnSessionCreate, TryOnSessionResponse, TryOnStatus
 from app.schemas.user import UserResponse
 import asyncio
 
@@ -72,6 +73,7 @@ async def try_on(
     cloth_bytes = await cloth_image.read()
 
     media_repo = MediaRepository()
+    event_repo = TryOnEventRepository()
     tryon_repo = TryOnRepository()
 
     def build_file_key(kind: str, filename: str) -> str:
@@ -120,6 +122,13 @@ async def try_on(
         ),
         user_id=current_user.id,
     )
+    await event_repo.create_event(
+        db,
+        session_id=session.id,
+        event_type=TryOnEventType.QUEUED,
+        attempt=0,
+        details="Try-on session created",
+    )
 
     cache_key = build_tryon_cache_key(
         model_bytes=model_bytes,
@@ -139,6 +148,13 @@ async def try_on(
             session.id,
             TryOnStatus.COMPLETED,
             result_media_id=result_media_id,
+        )
+        await event_repo.create_event(
+            db,
+            session_id=session.id,
+            event_type=TryOnEventType.COMPLETED,
+            attempt=0,
+            details="Served from Redis cache",
         )
         return {
             "success": True,
@@ -167,6 +183,14 @@ async def try_on(
         await enqueue_tryon_task(task)
     except Exception as exc:
         await tryon_repo.update_status(db, session.id, TryOnStatus.FAILED, error_text=str(exc))
+        await event_repo.create_event(
+            db,
+            session_id=session.id,
+            event_type=TryOnEventType.FAILED,
+            attempt=0,
+            error_text=str(exc),
+            details="Failed to enqueue try-on task",
+        )
         raise HTTPException(status_code=500, detail=f"Ошибка постановки задачи в очередь: {str(exc)}")
 
     return {
@@ -188,6 +212,7 @@ async def get_tryon_session(
     db: AsyncSession = Depends(get_db),
 ):
     tryon_repo = TryOnRepository()
+    tryon_event_repo = TryOnEventRepository()
     session = await tryon_repo.get(db, session_id)
 
     if session is None or session.user_id != current_user.id:
@@ -310,6 +335,7 @@ async def tryon_system_metrics(
         "sessions": {
             "status_counts": await tryon_repo.get_status_counts(db),
             "recent_failures": await tryon_repo.get_recent_failures(db, limit=5),
+            "recent_events": await tryon_event_repo.get_recent_events(db, limit=10),
         },
         "requested_by_user_id": current_user.id,
     }

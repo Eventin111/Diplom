@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tryon_queue import delete_tryon_runtime_artifacts, trim_tryon_dead_letter_queue
+from app.repositories.tryon_event_repo import TryOnEventRepository
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
 
@@ -15,6 +16,7 @@ _last_cleanup_run_at = 0.0
 
 async def run_tryon_cleanup(*, force: bool = False) -> dict[str, int | bool]:
     tryon_repo = TryOnRepository()
+    event_repo = TryOnEventRepository()
     media_repo = MediaRepository()
     older_than = datetime.now(timezone.utc) - timedelta(days=max(int(settings.TRYON_RETENTION_DAYS), 1))
     batch_size = max(int(settings.TRYON_CLEANUP_BATCH_SIZE), 1)
@@ -36,6 +38,7 @@ async def run_tryon_cleanup(*, force: bool = False) -> dict[str, int | bool]:
         )
         media_assets = await media_repo.get_by_ids(db, media_ids)
 
+        deleted_events = await event_repo.delete_by_session_ids(db, session_ids)
         deleted_sessions = await tryon_repo.delete_many(db, session_ids)
         deleted_media = await media_repo.delete_many(db, media_ids)
 
@@ -53,6 +56,7 @@ async def run_tryon_cleanup(*, force: bool = False) -> dict[str, int | bool]:
     return {
         "ran": True,
         "forced": force,
+        "deleted_events": deleted_events,
         "deleted_sessions": deleted_sessions,
         "deleted_media_records": deleted_media,
         "deleted_storage_items": storage_deleted,
@@ -69,6 +73,7 @@ async def maybe_run_periodic_tryon_cleanup() -> dict[str, int | bool]:
     if now - _last_cleanup_run_at < interval_seconds:
         return {
             "ran": False,
+            "deleted_events": 0,
             "deleted_sessions": 0,
             "deleted_media_records": 0,
             "deleted_storage_items": 0,

@@ -7,7 +7,7 @@ from app.schemas.feed import FeedItemCreate, FeedPagination, FeedItemWithStats
 from app.schemas.garment import GarmentCreate, GarmentUpdate
 from app.schemas.media import MediaCreate, MediaResponse, MediaType
 from app.schemas.social import LikeStats
-from app.schemas.tryon import TryOnResult, TryOnSessionResponse, TryOnStatus, TryOnSessionUpdate
+from app.schemas.tryon import TryOnEventResponse, TryOnEventType, TryOnResult, TryOnSessionResponse, TryOnStatus, TryOnSessionUpdate
 from app.schemas.user import Token, UserCreate, UserLogin, UserUpdate
 
 
@@ -98,3 +98,18 @@ def test_feed_pagination_accepts_stats_items():
     assert page.items[0].likes_count == 3
     assert likes.is_liked is True
     assert update.error_text == "boom"
+
+
+def test_tryon_event_response_accepts_event_type():
+    event = TryOnEventResponse(
+        id=1,
+        session_id=7,
+        event_type=TryOnEventType.RETRY,
+        attempt=2,
+        error_text="boom",
+        details="retry scheduled",
+        created_at=datetime.utcnow(),
+    )
+
+    assert event.event_type == TryOnEventType.RETRY
+    assert event.attempt == 2
