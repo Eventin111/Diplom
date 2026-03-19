@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.db import AsyncSessionLocal, get_db
 from app.core.security import get_current_user, get_user_by_token
 from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
+from app.core.tryon_rate_limit import enforce_tryon_rate_limit
 from app.core.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
@@ -47,6 +48,13 @@ def _build_media_file_url(media_id: int | None) -> str | None:
     return f"{settings.API_V1}/media/{media_id}/file"
 
 
+async def enforce_current_user_tryon_rate_limit(
+    current_user: UserResponse = Depends(get_current_user),
+) -> UserResponse:
+    await enforce_tryon_rate_limit(current_user.id)
+    return current_user
+
+
 @router.post("/try-on")
 async def try_on(
     model_image: UploadFile = File(..., description="Фото человека"),
@@ -57,7 +65,7 @@ async def try_on(
     num_steps: int = 4,
     num_samples: int = 1,
     seed: int = -1,
-    current_user: UserResponse = Depends(get_current_user),
+    current_user: UserResponse = Depends(enforce_current_user_tryon_rate_limit),
     db: AsyncSession = Depends(get_db),
     use_case: TryOnUseCase = Depends(get_tryon_use_case),
 ):

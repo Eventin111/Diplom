@@ -87,3 +87,12 @@ def test_config_exposes_project_level_sections(monkeypatch):
     assert config.project_config.root_dir.name == "SwipeIt"
     assert config.project_config.frontend.api_base_url == "http://localhost:4173"
     assert config.project_config.ml.device == "cpu"
+
+
+def test_config_exposes_tryon_rate_limit_settings(monkeypatch):
+    monkeypatch.setenv("TRYON_RATE_LIMIT_REQUESTS", "7")
+    monkeypatch.setenv("TRYON_RATE_LIMIT_WINDOW_SECONDS", "90")
+    config = reload_config_module()
+
+    assert config.settings.TRYON_RATE_LIMIT_REQUESTS == 7
+    assert config.settings.TRYON_RATE_LIMIT_WINDOW_SECONDS == 90
