@@ -1,6 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import Any, List, Optional
 from app.models.tryon import TryOnSession
 from app.schemas.tryon import TryOnSessionCreate, TryOnStatus
 from .base import BaseRepository
@@ -59,3 +59,32 @@ class TryOnRepository(BaseRepository[TryOnSession]):
             .limit(limit)
         )
         return result.scalars().all()
+
+    async def get_status_counts(self, db: AsyncSession) -> dict[str, int]:
+        result = await db.execute(
+            select(TryOnSession.status, func.count(TryOnSession.id))
+            .group_by(TryOnSession.status)
+        )
+        counts = {status.value: 0 for status in TryOnStatus}
+        for status_value, count in result.all():
+            normalized_status = status_value.value if isinstance(status_value, TryOnStatus) else str(status_value)
+            counts[normalized_status] = int(count)
+        return counts
+
+    async def get_recent_failures(self, db: AsyncSession, limit: int = 5) -> List[dict[str, Any]]:
+        result = await db.execute(
+            select(TryOnSession)
+            .where(TryOnSession.status == TryOnStatus.FAILED)
+            .order_by(TryOnSession.updated_at.desc(), TryOnSession.created_at.desc())
+            .limit(limit)
+        )
+        sessions = result.scalars().all()
+        return [
+            {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "error_text": session.error_text,
+                "updated_at": session.updated_at.isoformat() if session.updated_at else None,
+            }
+            for session in sessions
+        ]

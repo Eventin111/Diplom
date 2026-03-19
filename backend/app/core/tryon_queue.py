@@ -83,3 +83,17 @@ async def acquire_tryon_processing_lock(session_id: int) -> bool:
 
 async def release_tryon_processing_lock(session_id: int) -> None:
     await get_redis_client().delete(build_tryon_processing_lock_key(session_id))
+
+
+async def get_tryon_processing_lock_count() -> int:
+    redis_client = get_redis_client()
+    cursor = 0
+    count = 0
+
+    while True:
+        cursor, keys = await redis_client.scan(cursor=cursor, match="tryon:processing:*", count=100)
+        count += len(keys)
+        if cursor == 0:
+            break
+
+    return count

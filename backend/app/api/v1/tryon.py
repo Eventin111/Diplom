@@ -17,6 +17,7 @@ from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
 from app.core.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
+    get_tryon_processing_lock_count,
     get_tryon_queue_health,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
@@ -243,3 +244,29 @@ async def queue_health_check():
         return await get_tryon_queue_health()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Try-on queue unavailable: {str(exc)}")
+
+
+@router.get("/system/metrics")
+async def tryon_system_metrics(
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tryon_repo = TryOnRepository()
+
+    try:
+        queue_health = await get_tryon_queue_health()
+        processing_locks = await get_tryon_processing_lock_count()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Try-on metrics unavailable: {str(exc)}")
+
+    return {
+        "queue": {
+            **queue_health,
+            "processing_locks": processing_locks,
+        },
+        "sessions": {
+            "status_counts": await tryon_repo.get_status_counts(db),
+            "recent_failures": await tryon_repo.get_recent_failures(db, limit=5),
+        },
+        "requested_by_user_id": current_user.id,
+    }
