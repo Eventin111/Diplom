@@ -47,3 +47,18 @@ async def dequeue_tryon_task(timeout_seconds: Optional[int] = None) -> Optional[
     _, raw_payload = item
     payload = json.loads(raw_payload)
     return payload if isinstance(payload, dict) else None
+
+
+async def get_tryon_queue_length() -> int:
+    return int(await get_redis_client().llen(settings.TRYON_QUEUE_NAME))
+
+
+async def get_tryon_queue_health() -> dict[str, Any]:
+    redis_client = get_redis_client()
+    redis_ok = bool(await redis_client.ping())
+    queue_length = int(await redis_client.llen(settings.TRYON_QUEUE_NAME))
+    return {
+        "redis_ok": redis_ok,
+        "queue_name": settings.TRYON_QUEUE_NAME,
+        "queue_length": queue_length,
+    }

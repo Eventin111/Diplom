@@ -14,7 +14,11 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
-from app.core.tryon_queue import build_tryon_task_payload, enqueue_tryon_task
+from app.core.tryon_queue import (
+    build_tryon_task_payload,
+    enqueue_tryon_task,
+    get_tryon_queue_health,
+)
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.repositories.media_repo import MediaRepository
 from app.repositories.tryon_repo import TryOnRepository
@@ -185,3 +189,11 @@ async def get_tryon_session(
 async def health_check(use_case: TryOnUseCase = Depends(get_tryon_use_case)):
     ml_service = use_case._ml_service
     return ml_service.health_check()
+
+
+@router.get("/queue/health")
+async def queue_health_check():
+    try:
+        return await get_tryon_queue_health()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Try-on queue unavailable: {str(exc)}")
