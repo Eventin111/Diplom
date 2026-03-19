@@ -30,6 +30,8 @@ class BackendSettings(BaseSettings):
     TRYON_QUEUE_BLOCK_TIMEOUT_SECONDS: int = 5
     TRYON_QUEUE_MAX_RETRIES: int = 2
     TRYON_PROCESSING_LOCK_TTL_SECONDS: int = 900
+    TRYON_TASK_SNAPSHOT_TTL_SECONDS: int = 86400
+    TRYON_STALE_PROCESSING_THRESHOLD_SECONDS: int = 1800
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

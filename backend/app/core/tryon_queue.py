@@ -37,7 +37,16 @@ def build_tryon_task_payload(
 
 
 async def enqueue_tryon_task(task: dict[str, Any]) -> None:
-    await get_redis_client().lpush(settings.TRYON_QUEUE_NAME, json.dumps(task, separators=(",", ":")))
+    redis_client = get_redis_client()
+    serialized_task = json.dumps(task, separators=(",", ":"))
+    await redis_client.lpush(settings.TRYON_QUEUE_NAME, serialized_task)
+    session_id = task.get("session_id")
+    if session_id is not None:
+        await redis_client.set(
+            build_tryon_task_snapshot_key(int(session_id)),
+            serialized_task,
+            ex=settings.TRYON_TASK_SNAPSHOT_TTL_SECONDS,
+        )
 
 
 async def dequeue_tryon_task(timeout_seconds: Optional[int] = None) -> Optional[dict[str, Any]]:
@@ -73,6 +82,10 @@ def build_tryon_processing_lock_key(session_id: int) -> str:
     return f"tryon:processing:{session_id}"
 
 
+def build_tryon_task_snapshot_key(session_id: int) -> str:
+    return f"tryon:task:{session_id}"
+
+
 async def acquire_tryon_processing_lock(session_id: int) -> bool:
     return bool(
         await get_redis_client().set(
@@ -86,6 +99,10 @@ async def acquire_tryon_processing_lock(session_id: int) -> bool:
 
 async def release_tryon_processing_lock(session_id: int) -> None:
     await get_redis_client().delete(build_tryon_processing_lock_key(session_id))
+
+
+async def has_tryon_processing_lock(session_id: int) -> bool:
+    return bool(await get_redis_client().exists(build_tryon_processing_lock_key(session_id)))
 
 
 async def get_tryon_processing_lock_count() -> int:
@@ -122,6 +139,14 @@ async def get_tryon_dead_letters(limit: int = 20) -> list[dict[str, Any]]:
             payload["index"] = index
             items.append(payload)
     return items
+
+
+async def get_tryon_task_snapshot(session_id: int) -> Optional[dict[str, Any]]:
+    raw_item = await get_redis_client().get(build_tryon_task_snapshot_key(session_id))
+    if raw_item is None:
+        return None
+    payload = json.loads(raw_item)
+    return payload if isinstance(payload, dict) else None
 
 
 async def requeue_tryon_dead_letter(index: int) -> dict[str, Any]:

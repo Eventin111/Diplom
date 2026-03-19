@@ -6,6 +6,7 @@ import sys
 class FakeRedis:
     def __init__(self):
         self.items = []
+        self.storage = {}
 
     async def lpush(self, queue_name, payload):
         self.items.insert(0, (queue_name, payload))
@@ -40,6 +41,13 @@ class FakeRedis:
             updated.append((queued_name, payload))
         self.items = updated
         return removed
+
+    async def set(self, key, value, ex=None, nx=False):
+        self.storage[key] = value
+        return True
+
+    async def get(self, key):
+        return self.storage.get(key)
 
 
 def reload_tryon_queue_module():

@@ -27,6 +27,12 @@ class FakeRedis:
     async def delete(self, key):
         self.storage.pop(key, None)
 
+    async def get(self, key):
+        return self.storage.get(key)
+
+    async def exists(self, key):
+        return key in self.storage
+
 
 def reload_tryon_queue_module():
     sys.modules.pop("app.core.tryon_queue", None)
@@ -98,3 +104,30 @@ def test_processing_lock_acquire_and_release(monkeypatch):
         return first, second, third
 
     assert asyncio.run(scenario()) == (True, False, True)
+
+
+def test_enqueue_task_stores_snapshot_and_can_read_it(monkeypatch):
+    module = reload_tryon_queue_module()
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(module, "get_redis_client", lambda: fake_redis)
+
+    payload = module.build_tryon_task_payload(
+        session_id=11,
+        user_id=22,
+        avatar_media_id=33,
+        cloth_media_id=44,
+        model_type="dc",
+        category=2,
+        scale=1.5,
+        num_steps=4,
+        num_samples=2,
+        seed=7,
+    )
+
+    async def scenario():
+        await module.enqueue_tryon_task(payload)
+        return await module.get_tryon_task_snapshot(11)
+
+    restored = asyncio.run(scenario())
+
+    assert restored == payload

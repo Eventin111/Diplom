@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from datetime import datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, List, Optional
 from app.models.tryon import TryOnSession
@@ -88,3 +90,17 @@ class TryOnRepository(BaseRepository[TryOnSession]):
             }
             for session in sessions
         ]
+
+    async def get_stale_processing_sessions(self, db: AsyncSession, older_than: datetime) -> List[TryOnSession]:
+        result = await db.execute(
+            select(TryOnSession)
+            .where(TryOnSession.status == TryOnStatus.PROCESSING)
+            .where(
+                or_(
+                    TryOnSession.updated_at <= older_than,
+                    (TryOnSession.updated_at.is_(None) & (TryOnSession.created_at <= older_than)),
+                )
+            )
+            .order_by(TryOnSession.created_at.asc())
+        )
+        return result.scalars().all()
