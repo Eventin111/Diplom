@@ -61,6 +61,10 @@ class S3Client:
         if not self._client:
             return
 
+        if not hasattr(self._client, "put_bucket_policy"):
+            logger.info("ℹ️ Клиент S3 не поддерживает put_bucket_policy, пропускаем настройку policy")
+            return
+
         policy = {
             "Version": "2012-10-17",
             "Statement": [
@@ -97,7 +101,8 @@ class S3Client:
                 ACL='public-read'
             )
             
-            public_url = f"{settings.s3_public_url}/{self.bucket_name}/{file_key}"
+            public_base_url = getattr(settings, "S3_PUBLIC_URL", None) or getattr(settings, "s3_public_url")
+            public_url = f"{public_base_url}/{self.bucket_name}/{file_key}"
             logger.info(f"✅ Файл загружен: {public_url}")
             return public_url
             
