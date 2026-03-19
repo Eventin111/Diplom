@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { runTryOn } from '../../services/api/tryon';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getTryOnSession, runTryOn, subscribeToTryOnSession } from '../../services/api/tryon';
 import './TryOnPage.css';
 
 const INFERENCE_STEPS = ['Подбираем стиль', 'Уточняем посадку', 'Собираем образ', 'Финальный штрих'];
@@ -38,6 +38,8 @@ const TryOnPage = () => {
   const clothInputRef = useRef(null);
   const autoStartTriggeredRef = useRef(false);
   const requestInFlightRef = useRef(false);
+  const websocketRef = useRef(null);
+  const terminalStatusSeenRef = useRef(false);
 
   const presetClothPhoto = location.state?.clothPhoto || location.state?.photo || '';
   const [profileInfo, setProfileInfo] = useState(readPrimaryProfilePhoto);
@@ -49,6 +51,8 @@ const TryOnPage = () => {
   const [progress, setProgress] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [sessionId, setSessionId] = useState(null);
+  const [serverStatus, setServerStatus] = useState('');
 
   const outfit = location.state?.outfit || {
     brand: 'Бренд не указан',
@@ -63,6 +67,93 @@ const TryOnPage = () => {
     : presetClothPhoto
       ? 'Выбрано из ленты'
       : 'Фото не выбрано';
+
+  const closeTryOnSocket = () => {
+    if (!websocketRef.current) {
+      return;
+    }
+
+    websocketRef.current.close();
+    websocketRef.current = null;
+  };
+
+  const applySessionUpdate = (payload) => {
+    const nextStatus = String(payload?.status || '').toLowerCase();
+    if (!nextStatus) {
+      return;
+    }
+
+    setServerStatus(nextStatus);
+
+    if (nextStatus === 'queued') {
+      setProgress((current) => Math.max(current, 12));
+      setActiveStepIndex(0);
+      return;
+    }
+
+    if (nextStatus === 'processing') {
+      setProgress((current) => Math.max(current, 55));
+      setActiveStepIndex(Math.min(2, INFERENCE_STEPS.length - 1));
+      return;
+    }
+
+    if (nextStatus === 'completed') {
+      terminalStatusSeenRef.current = true;
+      setProgress(100);
+      setActiveStepIndex(INFERENCE_STEPS.length - 1);
+      setResultImage(payload?.result_image_url || '');
+      setIsProcessing(false);
+      closeTryOnSocket();
+      return;
+    }
+
+    if (nextStatus === 'failed') {
+      terminalStatusSeenRef.current = true;
+      setError(payload?.error_text || 'Примерка завершилась с ошибкой.');
+      setIsProcessing(false);
+      closeTryOnSocket();
+    }
+  };
+
+  const syncTryOnSession = async (nextSessionId) => {
+    const payload = await getTryOnSession(nextSessionId);
+    applySessionUpdate(payload);
+  };
+
+  const connectToTryOnSession = (nextSessionId) => {
+    closeTryOnSocket();
+    websocketRef.current = subscribeToTryOnSession(nextSessionId, {
+      onMessage: (payload) => {
+        applySessionUpdate(payload);
+      },
+      onError: async () => {
+        if (terminalStatusSeenRef.current) {
+          return;
+        }
+
+        try {
+          await syncTryOnSession(nextSessionId);
+        } catch (sessionError) {
+          setError(sessionError?.message || 'Не удалось получить статус try-on сессии.');
+          setIsProcessing(false);
+        }
+      },
+      onClose: async () => {
+        websocketRef.current = null;
+
+        if (terminalStatusSeenRef.current) {
+          return;
+        }
+
+        try {
+          await syncTryOnSession(nextSessionId);
+        } catch (sessionError) {
+          setError(sessionError?.message || 'Соединение с try-on сессией прервалось.');
+          setIsProcessing(false);
+        }
+      }
+    });
+  };
 
   useEffect(() => {
     const syncProfilePhoto = () => {
@@ -79,8 +170,16 @@ const TryOnPage = () => {
     setClothFile(null);
     setResultImage('');
     setError('');
+    setSessionId(null);
+    setServerStatus('');
+    terminalStatusSeenRef.current = false;
+    closeTryOnSocket();
     autoStartTriggeredRef.current = false;
   }, [presetClothPhoto]);
+
+  useEffect(() => () => {
+    closeTryOnSocket();
+  }, []);
 
   const handlePickClothPhoto = () => {
     clothInputRef.current?.click();
@@ -119,9 +218,14 @@ const TryOnPage = () => {
     requestInFlightRef.current = true;
     setIsProcessing(true);
     setError('');
+    setResultImage('');
     setProgress(3);
     setElapsedSeconds(0);
     setActiveStepIndex(0);
+    setSessionId(null);
+    setServerStatus('');
+    terminalStatusSeenRef.current = false;
+    closeTryOnSocket();
 
     try {
       const payload = await runTryOn({
@@ -135,17 +239,28 @@ const TryOnPage = () => {
         seed: -1
       });
 
-      if (!payload.resultUrl) {
-        throw new Error('Сервер вернул пустой результат примерки.');
+      if (payload.resultUrl) {
+        terminalStatusSeenRef.current = true;
+        setServerStatus(payload.status || 'completed');
+        setProgress(100);
+        setActiveStepIndex(INFERENCE_STEPS.length - 1);
+        setResultImage(payload.resultUrl);
+        setIsProcessing(false);
+        return;
       }
 
-      setProgress(100);
-      setActiveStepIndex(INFERENCE_STEPS.length - 1);
-      setResultImage(payload.resultUrl);
+      if (!payload.sessionId) {
+        throw new Error('Сервер не вернул session_id для try-on задачи.');
+      }
+
+      setSessionId(payload.sessionId);
+      setServerStatus(payload.status || (payload.queued ? 'queued' : 'processing'));
+      setProgress(payload.queued ? 12 : 20);
+      connectToTryOnSession(payload.sessionId);
     } catch (requestError) {
       setError(requestError?.message || 'Ошибка обработки примерки');
-    } finally {
       setIsProcessing(false);
+    } finally {
       requestInFlightRef.current = false;
     }
   };
@@ -171,11 +286,11 @@ const TryOnPage = () => {
     try {
       await navigator.share({
         title: 'Результат виртуальной примерки',
-        text: 'Примерка в Swipelt',
+        text: 'Примерка в SwipeIt',
         url: window.location.href
       });
     } catch (shareError) {
-      // user canceled share action
+      // User canceled share action.
     }
   };
 
@@ -200,7 +315,7 @@ const TryOnPage = () => {
       }
       sessionStorage.setItem(autoStartKey, '1');
     } catch (storageError) {
-      // ignore storage limitations in private mode
+      // Ignore storage limitations in private mode.
     }
 
     autoStartTriggeredRef.current = true;
@@ -312,6 +427,11 @@ const TryOnPage = () => {
           <section className="tryon-card tryon-card--status">
             <div className="tryon-loader" />
             <p className="tryon-status-title">Создаем вашу примерку</p>
+            {sessionId && (
+              <p className="tryon-status-subtitle">
+                Сессия #{sessionId} · {serverStatus || 'queued'}
+              </p>
+            )}
             <p className="tryon-status-subtitle">
               {INFERENCE_STEPS[activeStepIndex]} · {elapsedSeconds}с
             </p>

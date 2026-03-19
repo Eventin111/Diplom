@@ -3,7 +3,18 @@ import { appConfig } from '../../config/appConfig';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const buildTryOnUrl = () => `${appConfig.apiBaseUrl}/api/v1/tryon/try-on`;
+const buildTryOnSessionStatusUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}`;
 const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
+
+const buildTryOnWebSocketUrl = (sessionId) => {
+  const token = getAuthToken();
+  const normalizedBaseUrl = String(appConfig.apiBaseUrl || '').replace(/^http/i, 'ws');
+  const url = new URL(`${normalizedBaseUrl}/api/v1/tryon/sessions/${sessionId}/ws`);
+  if (token) {
+    url.searchParams.set('token', token);
+  }
+  return url.toString();
+};
 
 const blobToJpegFile = async (blob, fallbackName) => {
   const contentType = String(blob?.type || '').toLowerCase();
@@ -86,6 +97,8 @@ const runTryOnMock = async ({ modelImage, clothImage }) => {
   await sleep(appConfig.mockDelayMs);
   return {
     id: Date.now(),
+    sessionId: null,
+    queued: false,
     resultUrl: typeof modelImage === 'string' ? modelImage : (typeof clothImage === 'string' ? clothImage : ''),
     status: 'completed',
     raw: { success: true, results: [], count: 0, mock: true }
@@ -142,8 +155,10 @@ export const runTryOn = async ({
     const payload = await response.json();
     return {
       id: Date.now(),
-      resultUrl: payload?.results?.[0] || '',
-      status: payload?.success ? 'completed' : 'failed',
+      sessionId: payload?.session_id || null,
+      queued: Boolean(payload?.queued),
+      resultUrl: payload?.results?.[0] || payload?.result_image_url || '',
+      status: payload?.status || (payload?.success ? 'completed' : 'failed'),
       raw: payload
     };
   } catch (error) {
@@ -158,4 +173,60 @@ export const runTryOn = async ({
 
     throw error;
   }
+};
+
+export const getTryOnSession = async (sessionId) => {
+  const headers = {};
+  const token = getAuthToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(buildTryOnSessionStatusUrl(sessionId), {
+    method: 'GET',
+    headers
+  });
+
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const payload = await response.json();
+      detail = payload?.detail || JSON.stringify(payload);
+    } catch (error) {
+      detail = await response.text();
+    }
+    throw new Error(`Try-on session request failed: ${response.status} ${detail}`);
+  }
+
+  return response.json();
+};
+
+export const subscribeToTryOnSession = (
+  sessionId,
+  {
+    onMessage,
+    onError,
+    onClose
+  } = {}
+) => {
+  const socket = new WebSocket(buildTryOnWebSocketUrl(sessionId));
+
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      onMessage?.(payload);
+    } catch (error) {
+      onError?.(error);
+    }
+  };
+
+  socket.onerror = (event) => {
+    onError?.(event);
+  };
+
+  socket.onclose = (event) => {
+    onClose?.(event);
+  };
+
+  return socket;
 };
