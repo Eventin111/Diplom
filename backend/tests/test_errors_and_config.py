@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import sys
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -83,8 +84,9 @@ def test_config_exposes_project_level_sections(monkeypatch):
     monkeypatch.setenv("REACT_APP_API_BASE_URL", "http://localhost:4173")
     monkeypatch.setenv("ML_DEVICE", "cpu")
     config = reload_config_module()
+    expected_root = Path(config.project_config.env_file).resolve().parent
 
-    assert config.project_config.root_dir.name == "SwipeIt"
+    assert config.project_config.root_dir.resolve() == expected_root
     assert config.project_config.frontend.api_base_url == "http://localhost:4173"
     assert config.project_config.ml.device == "cpu"
 
