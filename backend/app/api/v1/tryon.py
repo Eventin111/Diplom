@@ -20,6 +20,7 @@ from app.core.tryon_queue import (
     get_tryon_dead_letters,
     get_tryon_processing_lock_count,
     get_tryon_queue_health,
+    requeue_tryon_dead_letter,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.repositories.media_repo import MediaRepository
@@ -259,6 +260,23 @@ async def tryon_dead_letter_queue(
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Try-on dead-letter queue unavailable: {str(exc)}")
+
+
+@router.post("/queue/dead-letter/{index}/requeue")
+async def requeue_dead_letter_tryon(
+    index: int,
+    current_user: UserResponse = Depends(get_current_user),
+):
+    try:
+        payload = await requeue_tryon_dead_letter(index)
+        payload["requested_by_user_id"] = current_user.id
+        return payload
+    except IndexError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Try-on dead-letter requeue unavailable: {str(exc)}")
 
 
 @router.get("/system/metrics")

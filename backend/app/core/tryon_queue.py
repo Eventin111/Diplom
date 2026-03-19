@@ -116,8 +116,34 @@ async def enqueue_tryon_dead_letter(task: dict[str, Any], error_text: str) -> No
 async def get_tryon_dead_letters(limit: int = 20) -> list[dict[str, Any]]:
     raw_items = await get_redis_client().lrange(settings.TRYON_DEAD_LETTER_QUEUE_NAME, 0, max(limit - 1, 0))
     items: list[dict[str, Any]] = []
-    for raw_item in raw_items:
+    for index, raw_item in enumerate(raw_items):
         payload = json.loads(raw_item)
         if isinstance(payload, dict):
+            payload["index"] = index
             items.append(payload)
     return items
+
+
+async def requeue_tryon_dead_letter(index: int) -> dict[str, Any]:
+    redis_client = get_redis_client()
+    raw_item = await redis_client.lindex(settings.TRYON_DEAD_LETTER_QUEUE_NAME, index)
+    if raw_item is None:
+        raise IndexError("Dead-letter item not found")
+
+    payload = json.loads(raw_item)
+    if not isinstance(payload, dict) or not isinstance(payload.get("task"), dict):
+        raise ValueError("Dead-letter item has invalid format")
+
+    task = dict(payload["task"])
+    task["attempt"] = 0
+
+    tombstone = "__deleted__"
+    await redis_client.lset(settings.TRYON_DEAD_LETTER_QUEUE_NAME, index, tombstone)
+    await redis_client.lrem(settings.TRYON_DEAD_LETTER_QUEUE_NAME, 1, tombstone)
+    await enqueue_tryon_task(task)
+
+    return {
+        "requeued_task": task,
+        "previous_error_text": payload.get("error_text"),
+        "requeued_from_index": index,
+    }
