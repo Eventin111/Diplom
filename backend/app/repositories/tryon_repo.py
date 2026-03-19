@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Any, List, Optional
 from app.models.tryon import TryOnSession
@@ -104,3 +104,34 @@ class TryOnRepository(BaseRepository[TryOnSession]):
             .order_by(TryOnSession.created_at.asc())
         )
         return result.scalars().all()
+
+    async def get_cleanup_candidates(
+        self,
+        db: AsyncSession,
+        *,
+        older_than: datetime,
+        limit: int,
+    ) -> List[TryOnSession]:
+        result = await db.execute(
+            select(TryOnSession)
+            .where(TryOnSession.status.in_([TryOnStatus.COMPLETED, TryOnStatus.FAILED]))
+            .where(
+                or_(
+                    TryOnSession.updated_at <= older_than,
+                    (TryOnSession.updated_at.is_(None) & (TryOnSession.created_at <= older_than)),
+                )
+            )
+            .order_by(TryOnSession.created_at.asc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    async def delete_many(self, db: AsyncSession, session_ids: list[int]) -> int:
+        if not session_ids:
+            return 0
+
+        result = await db.execute(
+            delete(TryOnSession).where(TryOnSession.id.in_(session_ids))
+        )
+        await db.commit()
+        return int(result.rowcount or 0)

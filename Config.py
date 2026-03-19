@@ -34,6 +34,10 @@ class BackendSettings(BaseSettings):
     TRYON_STALE_PROCESSING_THRESHOLD_SECONDS: int = 1800
     TRYON_RATE_LIMIT_REQUESTS: int = 5
     TRYON_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    TRYON_RETENTION_DAYS: int = 7
+    TRYON_CLEANUP_INTERVAL_SECONDS: int = 3600
+    TRYON_CLEANUP_BATCH_SIZE: int = 50
+    TRYON_DEAD_LETTER_MAX_ITEMS: int = 100
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

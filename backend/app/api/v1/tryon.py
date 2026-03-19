@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.db import AsyncSessionLocal, get_db
 from app.core.security import get_current_user, get_user_by_token
 from app.core.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
+from app.core.tryon_cleanup import run_tryon_cleanup
 from app.core.tryon_rate_limit import enforce_tryon_rate_limit
 from app.core.tryon_queue import (
     build_tryon_task_payload,
@@ -349,3 +350,13 @@ async def recover_stale_tryon_sessions(
         "stale_threshold_seconds": settings.TRYON_STALE_PROCESSING_THRESHOLD_SECONDS,
         "requested_by_user_id": current_user.id,
     }
+
+
+@router.post("/cleanup/run")
+async def run_tryon_cleanup_now(
+    current_user: UserResponse = Depends(get_current_user),
+):
+    payload = await run_tryon_cleanup(force=True)
+    payload["requested_by_user_id"] = current_user.id
+    payload["retention_days"] = settings.TRYON_RETENTION_DAYS
+    return payload

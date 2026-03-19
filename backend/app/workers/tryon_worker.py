@@ -13,6 +13,7 @@ from PIL import Image
 from app.application.dto.tryon_dto import TryOnRequest
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
+from app.core.tryon_cleanup import maybe_run_periodic_tryon_cleanup
 from app.core.db import AsyncSessionLocal
 from app.core.local_media import build_local_media_path
 from app.core.s3 import s3_client
@@ -189,6 +190,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
 async def run_tryon_worker() -> None:
     logger.info("Try-on worker started. Queue: %s", settings.TRYON_QUEUE_NAME)
     while True:
+        await maybe_run_periodic_tryon_cleanup()
         task = await dequeue_tryon_task()
         if task is None:
             continue

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.models.media import MediaAsset
@@ -104,3 +104,35 @@ class MediaRepository(BaseRepository[MediaAsset]):
         
         result = await db.execute(query)
         return result.scalars().all()
+
+    async def get_by_ids(self, db: AsyncSession, media_ids: list[int]) -> List[MediaAsset]:
+        if not media_ids:
+            return []
+
+        result = await db.execute(
+            select(MediaAsset).where(MediaAsset.id.in_(media_ids))
+        )
+        return result.scalars().all()
+
+    async def delete_many(self, db: AsyncSession, media_ids: list[int]) -> int:
+        if not media_ids:
+            return 0
+
+        result = await db.execute(
+            delete(MediaAsset).where(MediaAsset.id.in_(media_ids))
+        )
+        await db.commit()
+        return int(result.rowcount or 0)
+
+    def delete_storage(self, storage_key: str) -> dict[str, bool]:
+        local_file_path = build_local_media_path(storage_key)
+        local_deleted = False
+        if local_file_path.exists():
+            local_file_path.unlink()
+            local_deleted = True
+
+        s3_deleted = s3_client.delete_file(storage_key)
+        return {
+            "local_deleted": local_deleted,
+            "s3_deleted": s3_deleted,
+        }

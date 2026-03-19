@@ -149,6 +149,28 @@ async def get_tryon_task_snapshot(session_id: int) -> Optional[dict[str, Any]]:
     return payload if isinstance(payload, dict) else None
 
 
+async def delete_tryon_runtime_artifacts(session_id: int) -> None:
+    await get_redis_client().delete(
+        build_tryon_task_snapshot_key(session_id),
+        build_tryon_processing_lock_key(session_id),
+    )
+
+
+async def trim_tryon_dead_letter_queue(max_items: int) -> int:
+    normalized_max_items = max(int(max_items), 0)
+    redis_client = get_redis_client()
+    current_length = int(await redis_client.llen(settings.TRYON_DEAD_LETTER_QUEUE_NAME))
+    if current_length <= normalized_max_items:
+        return 0
+
+    if normalized_max_items == 0:
+        await redis_client.ltrim(settings.TRYON_DEAD_LETTER_QUEUE_NAME, 1, 0)
+        return current_length
+
+    await redis_client.ltrim(settings.TRYON_DEAD_LETTER_QUEUE_NAME, 0, normalized_max_items - 1)
+    return current_length - normalized_max_items
+
+
 async def requeue_tryon_dead_letter(index: int) -> dict[str, Any]:
     redis_client = get_redis_client()
     raw_item = await redis_client.lindex(settings.TRYON_DEAD_LETTER_QUEUE_NAME, index)
