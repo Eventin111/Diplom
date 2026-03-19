@@ -77,3 +77,13 @@ def test_config_prefers_explicit_async_database_url(monkeypatch):
     config = reload_config_module()
 
     assert config.settings.async_database_url == "postgresql+asyncpg://user:pass@localhost:5432/swipeit"
+
+
+def test_config_exposes_project_level_sections(monkeypatch):
+    monkeypatch.setenv("REACT_APP_API_BASE_URL", "http://localhost:4173")
+    monkeypatch.setenv("ML_DEVICE", "cpu")
+    config = reload_config_module()
+
+    assert config.project_config.root_dir.name == "Diplom"
+    assert config.project_config.frontend.api_base_url == "http://localhost:4173"
+    assert config.project_config.ml.device == "cpu"

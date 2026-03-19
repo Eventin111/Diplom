@@ -1,47 +1,20 @@
-from pydantic import BaseSettings, AnyUrl
-from typing import List, Optional
-import os
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
-class Settings(BaseSettings):
-    API_V1: str = "/api/v1"
-    SECRET_KEY: str
-    DB_URL: AnyUrl
 
-    S3_ENDPOINT: str = "http://localhost:9000"
-    S3_ACCESS_KEY: str
-    S3_SECRET_KEY: str 
-    S3_BUCKET_NAME: str = "swipeit-media"
-    S3_REGION: str = "us-east-1"
-    S3_SECURE: bool = False  # True для HTTPS
-    # URL для доступа к файлам (может отличаться от endpoint)
-    S3_PUBLIC_URL: Optional[str] = None
+def _load_project_config_module():
+    config_path = Path(__file__).resolve().parents[3] / "Config.py"
+    spec = spec_from_file_location("project_config_module", config_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load project Config.py from {config_path}")
 
-    REDIS_URL: str = "redis://localhost:6379/0"
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    CORS_ORIGIN_REGEX: str = r"^https?://[A-Za-z0-9.-]+(:\d+)?$"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    # Для async БД
-    DB_ASYNC_URL: AnyUrl | None = None
-    
-    @property
-    def async_database_url(self) -> str:
-        """Генерирует async URL из обычного"""
-        if self.DB_ASYNC_URL:
-            return str(self.DB_ASYNC_URL)
-        return str(self.DB_URL).replace("postgresql://", "postgresql+asyncpg://")
-    
-    @property
-    def s3_public_url(self) -> str:
-        return self.S3_PUBLIC_URL or self.S3_ENDPOINT
 
-    class Config:
-        env_file = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
-        env_file_encoding = "utf-8"
+project_config_module = _load_project_config_module()
+Settings = project_config_module.BackendSettings
+project_config = project_config_module.load_project_config()
+settings = project_config.backend
 
-settings = Settings()

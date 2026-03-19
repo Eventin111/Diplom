@@ -14,7 +14,7 @@ def _load_project_config_module():
 
 
 project_config_module = _load_project_config_module()
-FrontendSettings = project_config_module.FrontendSettings
+MLSettings = project_config_module.MLSettings
 project_config = project_config_module.load_project_config()
-settings = project_config.frontend
+settings = project_config.ml
 
