@@ -59,6 +59,17 @@ async def like_feed_item(
     like = await like_repo.create(db, obj_in=like_data, user_id=current_user.id)
     return like
 
+
+@router.get("/liked-ids")
+async def get_liked_feed_item_ids(
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить id постов, которые текущий пользователь лайкнул."""
+    like_repo = LikeRepository()
+    likes = await like_repo.get_user_likes(db, user_id=current_user.id, limit=500)
+    return {"items": [like.feed_item_id for like in likes]}
+
 @router.delete("/{feed_item_id}/like")
 async def unlike_feed_item(
     feed_item_id: int,

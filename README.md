@@ -47,30 +47,26 @@ SwipeIt — это веб-платформа социальной сети, по
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/your-repo/swipeit.git
-cd swipeit/Diplom
+git clone https://github.com/Eventin111/Diplom.git
+cd Diplom
 ```
 
-### 2. Настройка Python (3.10)
+### 2. Создание окружения со всеми зависимостями
 
 ```bash
-conda create -n swipeit python=3.10
-conda activate swipeit
+conda env create -f environment.yml
+conda activate ootd
 ```
 
-### 3. Установка зависимостей backend + ml
+Окружение уже включает Python `3.10`, backend + ML зависимости и Node.js `18`.
 
-```bash
-pip install -r requirements.txt
-```
+### 3. Настройка окружения
 
-### 4. Настройка окружения
-
-Создай файл `.env` в корне `Diplom/`:
+Создай `.env` в корне проекта:
 
 ```env
 DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5432/swipeit
-SECRET_KEY=generate-secure-random-key
+SECRET_KEY=dev-secret-key
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin123
@@ -82,33 +78,64 @@ CORS_ORIGINS=["http://localhost:3000"]
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
-> ⚠️ **Важно**: Замени значения на свои безопасные!
-
-### 5. Запуск БД и MinIO
+### 4. Запуск БД, MinIO и Redis
 
 ```bash
 docker-compose up -d postgres minio redis
 ```
 
-### 6. Запуск backend
+После запуска будут доступны:
+
+- PostgreSQL: `localhost:5432`
+- MinIO API: `http://localhost:9000`
+- MinIO Console: `http://localhost:9001`
+- Redis: `localhost:6379`
+
+### 5. Запуск backend
 
 ```bash
 cd backend
-python run_server.py
+conda run -n ootd python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Сервер: `http://localhost:8000`  
-API docs: `http://localhost:8000/docs`
+- Backend: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
 
-### 7. Запуск frontend
+### 6. Запуск frontend
+
+Установи frontend-зависимости один раз:
 
 ```bash
 cd frontend
-npm install
-npm start
+conda run -n ootd npm install
 ```
 
-Frontend: `http://localhost:3000`
+Для разработки:
+
+```bash
+conda run -n ootd npm start
+```
+
+- Dev frontend: `http://localhost:3000`
+
+Если нужен более стабильный запуск без hot reload:
+
+```bash
+conda run -n ootd npm run build
+conda run -n ootd npx serve -s build -l 4173
+```
+
+- Stable frontend: `http://localhost:4173`
+
+### 7. Что сейчас сохраняется в БД
+
+В PostgreSQL сохраняются:
+
+- пользователи: таблица `users`
+- загруженные изображения: таблица `media_assets`
+- лайки: таблица `likes`
+- сессии примерки: таблица `tryon_sessions`
+- элементы ленты: таблица `feed_items`
 
 ## 👗 Virtual Try-On
 

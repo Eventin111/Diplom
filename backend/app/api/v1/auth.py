@@ -4,8 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.security import create_token, get_current_user
 from app.repositories.user_repo import UserRepository
-from app.schemas.user import UserCreate, UserResponse, Token, UserLogin
-from fastapi import Form
+from app.schemas.user import UserCreate, UserResponse, Token, UserUpdate
 
 router = APIRouter()
 
@@ -62,3 +61,15 @@ async def login(
 async def get_me(current_user: UserResponse = Depends(get_current_user)):
     """Получить информацию о текущем пользователе"""
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    user_data: UserUpdate,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновить профиль текущего пользователя"""
+    user_repo = UserRepository()
+    updated_user = await user_repo.update(db, db_obj=current_user, obj_in=user_data)
+    return updated_user

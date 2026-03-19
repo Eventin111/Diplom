@@ -1,10 +1,10 @@
 import { buildAvatarUrl } from '../services/authPolicy';
 
-export const createUserEntity = ({ id, email, username, avatar, isGuest = false }) => ({
+export const createUserEntity = ({ id, email, username, avatar, avatar_url, isGuest = false }) => ({
   id,
   email,
   username,
-  avatar: avatar || buildAvatarUrl(username, isGuest ? '666666' : 'ff0000'),
+  avatar: avatar || avatar_url || buildAvatarUrl(username, isGuest ? '666666' : 'ff0000'),
   isGuest
 });
 
@@ -15,4 +15,3 @@ export const sanitizeUserEntity = (user) => {
 
   return createUserEntity(user);
 };
-

@@ -13,6 +13,7 @@ class TryOnRepository(BaseRepository[TryOnSession]):
         db_obj = TryOnSession(
             user_id=user_id,
             avatar_media_id=obj_in.avatar_media_id,
+            cloth_media_id=obj_in.cloth_media_id,
             garment_id=obj_in.garment_id,
             status=TryOnStatus.QUEUED,
         )

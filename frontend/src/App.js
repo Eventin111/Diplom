@@ -12,7 +12,6 @@ import TryOnPage from './pages/TryOnPage/TryOnPage';
 import WardrobePage from './pages/WardrobePage/WardrobePage';
 import './styles/global.css';
 
-// Компонент для отображения SplashScreen при загрузке ленты
 function FeedSplashScreen({ isVisible, onFinish }) {
   if (!isVisible) return null;
   
@@ -42,7 +41,6 @@ function AppContent() {
     localStorage.setItem('appTheme', savedTheme);
   }, []);
 
-  // Показываем начальный SplashScreen только при первой загрузке
   useEffect(() => {
     const hasSeenSplash = localStorage.getItem('hasSeenSplash');
     
@@ -58,13 +56,10 @@ function AppContent() {
     }
   }, []);
 
-  // Логика для показа SplashScreen при загрузке ленты
   useEffect(() => {
     if (loading) return;
     
-    // Если пользователь авторизован и переходит на главную страницу
     if (isAuthenticated && location.pathname === '/') {
-      // Показываем SplashScreen для загрузки ленты только при первом входе
       if (isInitialLoad) {
         setShowFeedSplash(true);
         setIsInitialLoad(false);
@@ -78,7 +73,6 @@ function AppContent() {
     }
   }, [isAuthenticated, location.pathname, loading, isInitialLoad]);
 
-  // Не показываем ничего, пока идет начальная загрузка
   if (loading || showInitialSplash) {
     return <SplashScreen showImmediately={true} />;
   }

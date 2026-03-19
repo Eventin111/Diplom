@@ -4,6 +4,7 @@ import ProfilePage from '../ProfilePage/ProfilePage';
 import SearchPage from '../SearchPage/SearchPage';
 import ChatPage from '../ChatPage/ChatPage';
 import MusicTicker from '../../components/MusicTicker/MusicTicker';
+import { fetchLikedFeedIds, likeFeedItem, unlikeFeedItem } from '../../services/api/feed';
 import feedIcon from '../../assets/icons/feed.png';
 import searchIcon from '../../assets/icons/search.png';
 import profileIcon from '../../assets/icons/profile.png';
@@ -25,6 +26,7 @@ const FeedPage = () => {
   const [currentPostIndex, setCurrentPostIndex] = useState(0);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isLiked, setIsLiked] = useState({});
+  const [likeCounts, setLikeCounts] = useState({});
   const [photoTransition, setPhotoTransition] = useState(false);
   
   // Настройки из localStorage
@@ -229,6 +231,40 @@ const FeedPage = () => {
       }
     }
   ];
+
+  useEffect(() => {
+    setLikeCounts(
+      samplePosts.reduce((acc, post) => {
+        acc[post.id] = post.likes;
+        return acc;
+      }, {})
+    );
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        const likedIds = await fetchLikedFeedIds();
+        if (!isMounted) {
+          return;
+        }
+        setIsLiked(
+          likedIds.reduce((acc, id) => {
+            acc[id] = true;
+            return acc;
+          }, {})
+        );
+      } catch (error) {
+        // keep feed usable even if likes API is temporarily unavailable
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Получаем текущий пост и текущее фото
   const currentPost = activeTab === 'feed' ? samplePosts[currentPostIndex] : null;
@@ -479,13 +515,37 @@ const FeedPage = () => {
     localStorage.setItem('appSettings', JSON.stringify(settings));
   }, [settings]);
 
-  const handleLike = (postId) => {
-    setIsLiked(prev => ({
+  const handleLike = async (postId) => {
+    const wasLiked = Boolean(isLiked[postId]);
+
+    setIsLiked((prev) => ({
       ...prev,
-      [postId]: !prev[postId]
+      [postId]: !wasLiked
+    }));
+    setLikeCounts((prev) => ({
+      ...prev,
+      [postId]: Math.max(0, (prev[postId] ?? 0) + (wasLiked ? -1 : 1))
     }));
 
-    if (!isLiked[postId]) {
+    try {
+      if (wasLiked) {
+        await unlikeFeedItem(postId);
+      } else {
+        await likeFeedItem(postId);
+      }
+    } catch (error) {
+      setIsLiked((prev) => ({
+        ...prev,
+        [postId]: wasLiked
+      }));
+      setLikeCounts((prev) => ({
+        ...prev,
+        [postId]: Math.max(0, (prev[postId] ?? 0) + (wasLiked ? 1 : -1))
+      }));
+      return;
+    }
+
+    if (!wasLiked) {
       const heart = document.createElement('div');
       heart.innerHTML = '❤️';
       heart.style.position = 'fixed';
@@ -764,7 +824,7 @@ const FeedPage = () => {
                       <img src={likeIcon} alt="" className="action-icon-img" />
                     </span>
                     <span className="action-count">
-                      {isLiked[post.id] ? post.likes + 1 : post.likes}
+                      {likeCounts[post.id] ?? post.likes}
                     </span>
                   </button>
 

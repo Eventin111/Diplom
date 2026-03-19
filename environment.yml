@@ -1,0 +1,9 @@
+name: ootd
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - nodejs=18
+  - pip
+  - pip:
+      - -r requirements.txt

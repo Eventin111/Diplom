@@ -1,4 +1,5 @@
 import boto3
+import json
 from botocore.exceptions import ClientError
 from app.core.config import settings
 import logging
@@ -53,6 +54,34 @@ class S3Client:
                 logger.info(f"✅ Bucket {self.bucket_name} создан")
             except ClientError as e:
                 logger.warning(f"⚠️ Не удалось создать bucket: {e}")
+        finally:
+            self._ensure_public_read_policy()
+
+    def _ensure_public_read_policy(self):
+        if not self._client:
+            return
+
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "PublicReadGetObject",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{self.bucket_name}/*"],
+                }
+            ],
+        }
+
+        try:
+            self._client.put_bucket_policy(
+                Bucket=self.bucket_name,
+                Policy=json.dumps(policy),
+            )
+            logger.info(f"✅ Public-read policy применена для bucket {self.bucket_name}")
+        except ClientError as e:
+            logger.warning(f"⚠️ Не удалось применить public-read policy: {e}")
 
     async def upload_file(self, file_content: bytes, file_key: str, content_type: str = "application/octet-stream") -> str:
         """Загрузка файла в S3 (с проверкой доступности)"""
@@ -75,6 +104,19 @@ class S3Client:
         except Exception as e:
             logger.error(f"❌ Ошибка загрузки файла: {e}")
             raise Exception(f"Ошибка загрузки в S3: {e}")
+
+    def get_file(self, file_key: str) -> tuple[bytes, str]:
+        """Получить файл из S3/MinIO."""
+        if not self.client:
+            raise Exception("S3 клиент не доступен. Проверьте настройки MinIO.")
+
+        try:
+            response = self.client.get_object(Bucket=self.bucket_name, Key=file_key)
+            content_type = response.get("ContentType") or "application/octet-stream"
+            return response["Body"].read(), content_type
+        except Exception as e:
+            logger.error(f"❌ Ошибка чтения файла: {e}")
+            raise Exception(f"Ошибка чтения из S3: {e}")
 
     # ... остальные методы
 

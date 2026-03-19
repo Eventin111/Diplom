@@ -4,10 +4,10 @@ import { initializeAuthSession } from '../core/application/usecases/initializeAu
 import { loginUser } from '../core/application/usecases/loginUser';
 import { logoutUser } from '../core/application/usecases/logoutUser';
 import { registerUser } from '../core/application/usecases/registerUser';
-import { createMockAuthRepository } from '../core/infrastructure/repositories/mockAuthRepository';
+import { createApiAuthRepository } from '../core/infrastructure/repositories/apiAuthRepository';
 
 const AuthContext = createContext();
-const authRepository = createMockAuthRepository();
+const authRepository = createApiAuthRepository();
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -64,34 +64,25 @@ export const AuthProvider = ({ children }) => {
     return session.user;
   };
 
-  const updateUserProfile = (partialUser) => {
+  const updateUserProfile = async (partialUser) => {
+    if (!user) {
+      return null;
+    }
+
+    const nextUser = await authRepository.updateProfile({ ...user, ...partialUser });
+    setUser(nextUser);
+    localStorage.setItem(authKeys.user, JSON.stringify(nextUser));
+    return nextUser;
+  };
+
+  const previewUserProfile = (partialUser) => {
     if (!user) {
       return null;
     }
 
     const nextUser = { ...user, ...partialUser };
     setUser(nextUser);
-
     localStorage.setItem(authKeys.user, JSON.stringify(nextUser));
-
-    const rawRegisteredUsers = localStorage.getItem(authKeys.registeredUsers);
-    if (rawRegisteredUsers) {
-      try {
-        const parsed = JSON.parse(rawRegisteredUsers);
-        if (Array.isArray(parsed)) {
-          const updatedUsers = parsed.map((item) => {
-            if (String(item.email || '').toLowerCase() === String(nextUser.email || '').toLowerCase()) {
-              return { ...item, ...nextUser };
-            }
-            return item;
-          });
-          localStorage.setItem(authKeys.registeredUsers, JSON.stringify(updatedUsers));
-        }
-      } catch (error) {
-        // ignore malformed storage
-      }
-    }
-
     return nextUser;
   };
 
@@ -104,7 +95,8 @@ export const AuthProvider = ({ children }) => {
       logout, 
       register,
       clearAuth,
-      updateUserProfile
+      updateUserProfile,
+      previewUserProfile
     }}>
       {children}
     </AuthContext.Provider>

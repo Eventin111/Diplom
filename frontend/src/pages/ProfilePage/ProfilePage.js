@@ -1,13 +1,67 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { uploadMedia } from '../../services/api/media';
 import WardrobePage from '../WardrobePage/WardrobePage';
 import './ProfilePage.css';
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const compressImage = async (file, { maxSize = 1600, quality = 0.85 } = {}) => {
+  if (!file.type.startsWith('image/')) {
+    return file;
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+
+  const longestSide = Math.max(image.width, image.height);
+  if (longestSide <= maxSize) {
+    return file;
+  }
+
+  const scale = maxSize / longestSide;
+  const width = Math.round(image.width * scale);
+  const height = Math.round(image.height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return file;
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', quality);
+  });
+
+  if (!blob) {
+    return file;
+  }
+
+  const nextName = file.name.replace(/\.[^.]+$/, '') || 'image';
+  return new File([blob], `${nextName}.jpg`, { type: 'image/jpeg' });
+};
 
 const ProfilePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, isAuthenticated, updateUserProfile } = useAuth();
+  const { user, logout, isAuthenticated, updateUserProfile, previewUserProfile } = useAuth();
 
   const isGuest = user?.isGuest;
   const isStandaloneProfileRoute = location.pathname === '/profile';
@@ -25,6 +79,7 @@ const ProfilePage = () => {
   });
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const [uploadError, setUploadError] = useState('');
 
   if (!isAuthenticated) {
     navigate('/login');
@@ -64,28 +119,66 @@ const ProfilePage = () => {
   };
 
   const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const newPhoto = {
-        id: Date.now(),
-        url: event.target.result,
-        name: file.name,
-        date: new Date().toLocaleDateString()
-      };
+    setUploadError('');
+    void (async () => {
+      try {
+        const preparedFiles = await Promise.all(
+          files.map(async (file) => ({
+            originalName: file.name,
+            previewUrl: await readFileAsDataUrl(file),
+            uploadFile: await compressImage(file)
+          }))
+        );
 
-      const updatedPhotos = [...tryOnPhotos, newPhoto];
-      setTryOnPhotos(updatedPhotos);
-      localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
-      
-      if (updatedPhotos.length === 1) {
-        setPrimaryPhotoIndex(0);
-        localStorage.setItem('primaryPhotoIndex', '0');
+        const tempPhotos = preparedFiles.map((item, index) => ({
+          id: `temp-${Date.now()}-${index}`,
+          mediaId: null,
+          url: item.previewUrl,
+          name: item.originalName,
+          date: new Date().toLocaleDateString(),
+          isUploading: true
+        }));
+
+        setTryOnPhotos((prevPhotos) => {
+          const updatedPhotos = [...prevPhotos, ...tempPhotos];
+          localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
+
+          if (prevPhotos.length === 0 && updatedPhotos.length > 0) {
+            setPrimaryPhotoIndex(0);
+            localStorage.setItem('primaryPhotoIndex', '0');
+          }
+
+          return updatedPhotos;
+        });
+
+        const uploads = await Promise.all(
+          preparedFiles.map((item) => uploadMedia(item.uploadFile))
+        );
+
+        setTryOnPhotos((prevPhotos) => {
+          const uploadedPhotos = uploads.map((payload, index) => ({
+            id: payload.media.id,
+            mediaId: payload.media.id,
+            url: payload.upload_url || payload.media.public_url || tempPhotos[index].url,
+            name: preparedFiles[index].originalName,
+            date: tempPhotos[index].date
+          }));
+
+          const updatedPhotos = prevPhotos.map((photo) => {
+            const tempIndex = tempPhotos.findIndex((tempPhoto) => tempPhoto.id === photo.id);
+            return tempIndex === -1 ? photo : uploadedPhotos[tempIndex];
+          });
+
+          localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
+          return updatedPhotos;
+        });
+      } catch (error) {
+        setUploadError(error?.message || 'Не удалось загрузить фото');
       }
-    };
-    reader.readAsDataURL(file);
+    })();
     e.target.value = '';
   };
 
@@ -125,15 +218,22 @@ const ProfilePage = () => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const avatarUrl = event.target?.result;
-      if (!avatarUrl) {
-        return;
+    setUploadError('');
+    void (async () => {
+      try {
+        const previewUrl = await readFileAsDataUrl(file);
+        previewUserProfile({ avatar: previewUrl });
+        const uploadFile = await compressImage(file, { maxSize: 1200, quality: 0.82 });
+        const payload = await uploadMedia(uploadFile);
+        const avatarUrl = payload.upload_url || payload.media.public_url;
+        if (!avatarUrl) {
+          throw new Error('Сервер не вернул ссылку на аватар');
+        }
+        await updateUserProfile({ avatar: avatarUrl });
+      } catch (error) {
+        setUploadError(error?.message || 'Не удалось обновить аватар');
       }
-      updateUserProfile({ avatar: avatarUrl });
-    };
-    reader.readAsDataURL(file);
+    })();
     e.target.value = '';
   };
 
@@ -227,6 +327,7 @@ const ProfilePage = () => {
           </div>
         ) : (
           <>
+            {uploadError && <div className="tryon-alert tryon-alert--error">{uploadError}</div>}
             <div className="profile-info">
               <div className="avatar-section">
                 <img 
@@ -276,6 +377,7 @@ const ProfilePage = () => {
                   ref={fileInputRef}
                   onChange={handlePhotoUpload}
                   accept="image/*"
+                  multiple
                   style={{ display: 'none' }}
                 />
               </div>

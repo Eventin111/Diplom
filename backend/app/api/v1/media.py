@@ -1,11 +1,16 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import os
 import logging
 
 from app.core.db import get_db
+from app.core.local_media import build_local_media_path, ensure_local_media_dir
 from app.core.security import get_current_user
+from app.core.s3 import s3_client
 from app.repositories.media_repo import MediaRepository
 from app.schemas.media import MediaResponse, MediaCreate, MediaType, MediaUploadResponse
 from app.schemas.user import UserResponse
@@ -42,6 +47,9 @@ async def upload_media(
     
     # Читаем содержимое файла
     file_content = await file.read()
+    local_file_path = build_local_media_path(unique_filename)
+    local_file_path.parent.mkdir(parents=True, exist_ok=True)
+    local_file_path.write_bytes(file_content)
     
     # Определяем тип медиа
     media_type = ALLOWED_CONTENT_TYPES[file.content_type]
@@ -61,11 +69,7 @@ async def upload_media(
         
         # Формируем URL для ответа
         from app.core.config import settings
-        upload_url = None
-        if hasattr(settings, 'S3_PUBLIC_URL') and settings.S3_PUBLIC_URL:
-            upload_url = f"{settings.S3_PUBLIC_URL}/{settings.S3_BUCKET_NAME}/{unique_filename}"
-        elif hasattr(settings, 'S3_ENDPOINT') and settings.S3_ENDPOINT:
-            upload_url = f"{settings.S3_ENDPOINT}/{settings.S3_BUCKET_NAME}/{unique_filename}"
+        upload_url = f"{settings.API_V1}/media/{media.id}/file"
         
         logger.info(f"Файл загружен: {unique_filename}")
         
@@ -114,23 +118,8 @@ async def get_media(
             "updated_at": media.updated_at,
         }
         
-        # Добавляем публичный URL если есть storage_key
         if media.storage_key:
-            try:
-                from app.core.config import settings
-                logger.info(f"S3_PUBLIC_URL: {settings.S3_PUBLIC_URL}")
-                logger.info(f"S3_ENDPOINT: {settings.S3_ENDPOINT}")
-                logger.info(f"S3_BUCKET_NAME: {settings.S3_BUCKET_NAME}")
-                
-                if settings.S3_PUBLIC_URL:
-                    public_url = f"{settings.S3_PUBLIC_URL}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
-                else:
-                    public_url = f"{settings.S3_ENDPOINT}/{settings.S3_BUCKET_NAME}/{media.storage_key}"
-                
-                logger.info(f"Сформирован public_url: {public_url}")
-                media_dict["public_url"] = public_url
-            except Exception as e:
-                logger.warning(f"Не удалось добавить public_url: {e}")
+            media_dict["public_url"] = f"{settings.API_V1}/media/{media.id}/file"
         
         response = MediaResponse(**media_dict)
         logger.info(f"Возвращаем ответ: {response}")
@@ -141,3 +130,38 @@ async def get_media(
     except Exception as e:
         logger.error(f"Необработанное исключение в get_media: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера: {str(e)}")
+
+
+@router.get("/{media_id}/file")
+async def get_media_file(
+    media_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Отдать файл медиа через backend, даже если MinIO приватный."""
+    media_repo = MediaRepository()
+    media = await media_repo.get(db, media_id)
+
+    if not media:
+        raise HTTPException(status_code=404, detail="Медиа не найдено")
+
+    try:
+        local_file_path = build_local_media_path(media.storage_key)
+        if local_file_path.exists():
+            suffix = Path(media.storage_key).suffix.lower()
+            media_type = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+            }.get(suffix, "application/octet-stream")
+            return Response(content=local_file_path.read_bytes(), media_type=media_type)
+
+        file_bytes, content_type = s3_client.get_file(media.storage_key)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка чтения файла: {str(e)}"
+        )
+
+    return Response(content=file_bytes, media_type=content_type)

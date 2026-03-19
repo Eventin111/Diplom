@@ -85,6 +85,7 @@ minio_data/
 s3_local/
 storage/
 uploads/
+backend/local_media/
 # Не игнорируем storage-слой frontend (Clean Architecture)
 !frontend/src/core/infrastructure/storage/
 !frontend/src/core/infrastructure/storage/browserStorage.js

@@ -10,8 +10,9 @@ class TryOnStatus(str, Enum):
     FAILED = "failed"
 
 class TryOnSessionBase(BaseModel):
-    garment_id: int
-    avatar_media_id: int
+    garment_id: Optional[int] = None
+    avatar_media_id: Optional[int] = None
+    cloth_media_id: Optional[int] = None
 
 class TryOnSessionCreate(TryOnSessionBase):
     pass

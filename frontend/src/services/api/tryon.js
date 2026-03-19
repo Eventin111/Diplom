@@ -3,6 +3,7 @@ import { appConfig } from '../../config/appConfig';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const buildTryOnUrl = () => `${appConfig.apiBaseUrl}/api/v1/tryon/try-on`;
+const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
 
 const blobToJpegFile = async (blob, fallbackName) => {
   const contentType = String(blob?.type || '').toLowerCase();
@@ -115,8 +116,15 @@ export const runTryOn = async ({
   formData.append('seed', String(seed));
 
   try {
+    const headers = {};
+    const token = getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
     const response = await fetch(buildTryOnUrl(), {
       method: 'POST',
+      headers,
       body: formData
     });
 
