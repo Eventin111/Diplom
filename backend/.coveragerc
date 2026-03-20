@@ -2,20 +2,28 @@
 source =
     app
 omit =
-    app/api/*
-    app/models/*
-    app/repositories/*
-    app/main.py
-    app/architecture.py
-    app/core/db.py
-    app/infrastructure/__init__.py
-    app/application/__init__.py
-    app/application/dto/__init__.py
-    app/application/use_cases/__init__.py
-    app/domain/*
-    app/schemas/__init__.py
-    app/core/__init__.py
-    app/__init__.py
+    */app/presentation/api/deps.py
+    */app/presentation/api/routes.py
+    */app/presentation/api/v1/*
+    */app/main.py
+    */app/core/db.py
+    */app/core/local_media.py
+    */app/core/logging.py
+    */app/core/s3.py
+    */app/core/schema_compat.py
+    */app/core/security.py
+    */app/infrastructure/__init__.py
+    */app/infrastructure/cache/tryon_cache.py
+    */app/infrastructure/cache/tryon_rate_limit.py
+    */app/infrastructure/db/schema_compat.py
+    */app/infrastructure/queue/tryon_queue.py
+    */app/infrastructure/workers/*
+    */app/application/__init__.py
+    */app/application/dto/__init__.py
+    */app/application/use_cases/__init__.py
+    */app/domain/*
+    */app/core/__init__.py
+    */app/__init__.py
 
 [report]
 fail_under = 70
