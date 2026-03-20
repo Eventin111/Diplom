@@ -15,8 +15,8 @@ sys.path.append(str(project_root))
 
 # Импортируем настройки и модели
 from app.core.config import settings
-from app.core.db import Base
-from app.models import user, feed, garment, likes, media, tryon  # noqa
+from app.infrastructure.db.db import Base
+from app.infrastructure.persistence.models import feed, garment, likes, media, tryon, tryon_event, user  # noqa
 
 config = context.config
 target_metadata = Base.metadata

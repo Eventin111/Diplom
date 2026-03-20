@@ -8,7 +8,9 @@ from fastapi import HTTPException
 
 def load_security_module():
     sys.modules.pop("app.core.security", None)
-    return importlib.import_module("app.core.security")
+    sys.modules.pop("app.infrastructure.auth.security", None)
+    importlib.import_module("app.core.security")
+    return importlib.import_module("app.infrastructure.auth.security")
 
 
 def test_hash_password_and_verify_password():
@@ -39,8 +41,7 @@ def test_get_current_user_returns_repository_result(monkeypatch):
             assert user_id == 25
             return {"id": user_id}
 
-    fake_repo_module = type("RepoModule", (), {"UserRepository": DummyRepo})
-    monkeypatch.setitem(sys.modules, "app.repositories.user_repo", fake_repo_module)
+    monkeypatch.setattr(security, "UserRepository", DummyRepo)
 
     token = security.create_token(sub=25, ttl_min=5)
     user = asyncio.run(security.get_current_user(token=token, db="db-session"))
@@ -64,8 +65,7 @@ def test_get_current_user_raises_when_user_missing(monkeypatch):
         async def get(self, db, user_id):
             return None
 
-    fake_repo_module = type("RepoModule", (), {"UserRepository": DummyRepo})
-    monkeypatch.setitem(sys.modules, "app.repositories.user_repo", fake_repo_module)
+    monkeypatch.setattr(security, "UserRepository", DummyRepo)
 
     token = security.create_token(sub=5, ttl_min=5)
 

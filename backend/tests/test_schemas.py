@@ -3,12 +3,13 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.feed import FeedItemCreate, FeedPagination, FeedItemWithStats
-from app.schemas.garment import GarmentCreate, GarmentUpdate
-from app.schemas.media import MediaCreate, MediaResponse, MediaType
-from app.schemas.social import LikeStats
-from app.schemas.tryon import TryOnEventResponse, TryOnEventType, TryOnResult, TryOnSessionResponse, TryOnStatus, TryOnSessionUpdate
-from app.schemas.user import Token, UserCreate, UserLogin, UserUpdate
+from app.presentation.api.schemas.feed import FeedItemCreate, FeedItemWithStats, FeedPagination
+from app.presentation.api.schemas.garment import GarmentCreate, GarmentUpdate
+from app.presentation.api.schemas.media import MediaCreate, MediaResponse, MediaType
+from app.presentation.api.schemas.social import LikeStats
+from app.presentation.api.schemas.tryon import TryOnEventResponse, TryOnResult, TryOnSessionResponse, TryOnSessionUpdate
+from app.presentation.api.schemas.user import Token, UserCreate, UserLogin, UserUpdate
+from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 
 
 def test_media_create_rejects_non_positive_dimensions():

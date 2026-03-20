@@ -3,18 +3,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.db import Base, engine
-from app.core.redis_client import close_redis_client
-from app.core.schema_compat import ensure_schema_compatibility
-from app.api.routes import api_router
+from app.infrastructure.db.db import Base, engine
+from app.infrastructure.db.schema_compat import ensure_schema_compatibility
+from app.infrastructure.queue.redis_client import close_redis_client
+from app.presentation.api.routes import api_router
 from app.core.errors import setup_exception_handlers
 from app import models  # noqa: F401
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import hash_password
-from app.models.feed import FeedItem
-from app.models.user import User
+from app.infrastructure.persistence.models.feed import FeedItem
+from app.infrastructure.persistence.models.user import User
 
 
 DEMO_FEED_CAPTIONS = [

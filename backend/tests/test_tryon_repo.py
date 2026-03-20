@@ -1,6 +1,6 @@
 import asyncio
 
-from app.schemas.tryon import TryOnStatus
+from app.domain.enums.tryon import TryOnStatus
 
 
 class DummyResult:
@@ -50,7 +50,7 @@ class EventRow:
 
 
 def test_get_status_counts_fills_missing_statuses():
-    from app.repositories.tryon_repo import TryOnRepository
+    from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 
     repo = TryOnRepository()
     db = DummySession([DummyResult([(TryOnStatus.QUEUED, 2), (TryOnStatus.COMPLETED, 5)])])
@@ -67,7 +67,7 @@ def test_get_status_counts_fills_missing_statuses():
 
 def test_get_recent_failures_serializes_failure_payload():
     from datetime import datetime
-    from app.repositories.tryon_repo import TryOnRepository
+    from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 
     repo = TryOnRepository()
     db = DummySession(
@@ -94,7 +94,7 @@ def test_get_recent_failures_serializes_failure_payload():
 
 def test_get_recent_events_serializes_event_payload():
     from datetime import datetime
-    from app.repositories.tryon_event_repo import TryOnEventRepository
+    from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 
     repo = TryOnEventRepository()
     db = DummySession(

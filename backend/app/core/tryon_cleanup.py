@@ -6,9 +6,9 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tryon_queue import delete_tryon_runtime_artifacts, trim_tryon_dead_letter_queue
-from app.repositories.tryon_event_repo import TryOnEventRepository
-from app.repositories.media_repo import MediaRepository
-from app.repositories.tryon_repo import TryOnRepository
+from app.infrastructure.persistence.repositories.media_repo import MediaRepository
+from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
+from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 
 
 _last_cleanup_run_at = 0.0

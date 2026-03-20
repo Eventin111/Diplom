@@ -10,9 +10,9 @@ from app.core.tryon_queue import (
     get_tryon_task_snapshot,
     has_tryon_processing_lock,
 )
-from app.repositories.tryon_event_repo import TryOnEventRepository
-from app.repositories.tryon_repo import TryOnRepository
-from app.schemas.tryon import TryOnEventType, TryOnStatus
+from app.domain.enums.tryon import TryOnEventType, TryOnStatus
+from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
+from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 
 
 _last_recovery_run_at = 0.0
