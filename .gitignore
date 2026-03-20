@@ -90,6 +90,10 @@ backend/local_media/
 !frontend/src/core/infrastructure/storage/
 !frontend/src/core/infrastructure/storage/browserStorage.js
 !frontend/src/core/infrastructure/storage/browserStorage.test.js
+!backend/app/infrastructure/storage/
+!backend/app/infrastructure/storage/__init__.py
+!backend/app/infrastructure/storage/local_media.py
+!backend/app/infrastructure/storage/s3.py
 # Игнорируем загруженные файлы, но не структуру папок
 media/*
 !media/.gitkeep
