@@ -16,6 +16,8 @@ from app.core.config import settings
 from app.core.tryon_cleanup import maybe_run_periodic_tryon_cleanup
 from app.core.tryon_recovery import maybe_run_periodic_tryon_recovery
 from app.core.db import AsyncSessionLocal
+from app.core.schema_compat import ensure_schema_compatibility
+from app.core.db import engine
 from app.core.local_media import build_local_media_path
 from app.core.s3 import s3_client
 from app.core.tryon_cache import (
@@ -245,6 +247,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
 
 
 async def run_tryon_worker() -> None:
+    await ensure_schema_compatibility(engine)
     logger.info("Try-on worker started. Queue: %s", settings.TRYON_QUEUE_NAME)
     while True:
         await maybe_run_periodic_tryon_recovery()

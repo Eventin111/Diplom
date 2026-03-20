@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.db import Base, engine
 from app.core.redis_client import close_redis_client
+from app.core.schema_compat import ensure_schema_compatibility
 from app.api.routes import api_router
 from app.core.errors import setup_exception_handlers
 from app import models  # noqa: F401
@@ -68,6 +69,7 @@ async def seed_demo_feed() -> None:
 async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await ensure_schema_compatibility(engine)
     await seed_demo_feed()
     try:
         yield
