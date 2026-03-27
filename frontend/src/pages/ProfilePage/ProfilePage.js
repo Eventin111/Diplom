@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { uploadMedia } from '../../services/api/media';
+import { uploadMedia } from '../../core/application/usecases/uploadMedia';
+import { createApiMediaRepository } from '../../core/infrastructure/repositories/apiMediaRepository';
 import WardrobePage from '../WardrobePage/WardrobePage';
 import './ProfilePage.css';
+
+const mediaRepository = createApiMediaRepository();
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -155,7 +158,7 @@ const ProfilePage = () => {
         });
 
         const uploads = await Promise.all(
-          preparedFiles.map((item) => uploadMedia(item.uploadFile))
+          preparedFiles.map((item) => uploadMedia(mediaRepository, item.uploadFile))
         );
 
         setTryOnPhotos((prevPhotos) => {
@@ -224,7 +227,7 @@ const ProfilePage = () => {
         const previewUrl = await readFileAsDataUrl(file);
         previewUserProfile({ avatar: previewUrl });
         const uploadFile = await compressImage(file, { maxSize: 1200, quality: 0.82 });
-        const payload = await uploadMedia(uploadFile);
+        const payload = await uploadMedia(mediaRepository, uploadFile);
         const avatarUrl = payload.upload_url || payload.media.public_url;
         if (!avatarUrl) {
           throw new Error('Сервер не вернул ссылку на аватар');

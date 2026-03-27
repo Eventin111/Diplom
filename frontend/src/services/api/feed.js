@@ -1,46 +1,10 @@
-import { appConfig } from '../../config/appConfig';
+import { fetchLikedFeedIds as fetchLikedFeedIdsUseCase } from '../../core/application/usecases/fetchLikedFeedIds';
+import { likeFeedItem as likeFeedItemUseCase } from '../../core/application/usecases/likeFeedItem';
+import { unlikeFeedItem as unlikeFeedItemUseCase } from '../../core/application/usecases/unlikeFeedItem';
+import { createApiFeedRepository } from '../../core/infrastructure/repositories/apiFeedRepository';
 
-const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
+const feedRepository = createApiFeedRepository();
 
-const request = async (path, init = {}) => {
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error('Нужно войти в аккаунт.');
-  }
-
-  const response = await fetch(`${appConfig.apiBaseUrl}/api/v1/feed${path}`, {
-    ...init,
-    headers: {
-      ...(init.headers || {}),
-      Authorization: `Bearer ${token}`
-    }
-  });
-
-  if (!response.ok) {
-    let detail = 'Ошибка запроса';
-    try {
-      const payload = await response.json();
-      detail = payload?.detail || JSON.stringify(payload);
-    } catch (error) {
-      detail = await response.text();
-    }
-    throw new Error(detail || 'Ошибка запроса');
-  }
-
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
-};
-
-export const fetchLikedFeedIds = async () => {
-  const payload = await request('/liked-ids');
-  return Array.isArray(payload?.items) ? payload.items : [];
-};
-
-export const likeFeedItem = async (feedItemId) =>
-  request(`/${feedItemId}/like`, { method: 'POST' });
-
-export const unlikeFeedItem = async (feedItemId) =>
-  request(`/${feedItemId}/like`, { method: 'DELETE' });
+export const fetchLikedFeedIds = async () => fetchLikedFeedIdsUseCase(feedRepository);
+export const likeFeedItem = async (feedItemId) => likeFeedItemUseCase(feedRepository, feedItemId);
+export const unlikeFeedItem = async (feedItemId) => unlikeFeedItemUseCase(feedRepository, feedItemId);

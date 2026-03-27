@@ -13,8 +13,6 @@ from PIL import Image
 from app.application.dto.tryon_dto import TryOnRequest
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
-from app.core.tryon_cleanup import maybe_run_periodic_tryon_cleanup
-from app.core.tryon_recovery import maybe_run_periodic_tryon_recovery
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 from app.infrastructure.cache.tryon_cache import (
     build_tryon_cache_key,
@@ -24,6 +22,8 @@ from app.infrastructure.cache.tryon_cache import (
 from app.infrastructure.db.db import AsyncSessionLocal
 from app.infrastructure.db.db import engine
 from app.infrastructure.db.schema_compat import ensure_schema_compatibility
+from app.infrastructure.maintenance.tryon_cleanup import maybe_run_periodic_tryon_cleanup
+from app.infrastructure.maintenance.tryon_recovery import maybe_run_periodic_tryon_recovery
 from app.infrastructure.queue.tryon_queue import (
     acquire_tryon_processing_lock,
     dequeue_tryon_task,

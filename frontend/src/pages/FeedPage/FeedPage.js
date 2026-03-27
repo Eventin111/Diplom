@@ -4,7 +4,10 @@ import ProfilePage from '../ProfilePage/ProfilePage';
 import SearchPage from '../SearchPage/SearchPage';
 import ChatPage from '../ChatPage/ChatPage';
 import MusicTicker from '../../components/MusicTicker/MusicTicker';
-import { fetchLikedFeedIds, likeFeedItem, unlikeFeedItem } from '../../services/api/feed';
+import { fetchLikedFeedIds } from '../../core/application/usecases/fetchLikedFeedIds';
+import { likeFeedItem } from '../../core/application/usecases/likeFeedItem';
+import { unlikeFeedItem } from '../../core/application/usecases/unlikeFeedItem';
+import { createApiFeedRepository } from '../../core/infrastructure/repositories/apiFeedRepository';
 import feedIcon from '../../assets/icons/feed.png';
 import searchIcon from '../../assets/icons/search.png';
 import profileIcon from '../../assets/icons/profile.png';
@@ -13,6 +16,8 @@ import likeIcon from '../../assets/icons/like.png';
 import downloadIcon from '../../assets/icons/download.png';
 import wardrobeIcon from '../../assets/icons/wardrobe.png';
 import './FeedPage.css';
+
+const feedRepository = createApiFeedRepository();
 
 const FeedPage = () => {
   const navigate = useNavigate();
@@ -246,7 +251,7 @@ const FeedPage = () => {
 
     void (async () => {
       try {
-        const likedIds = await fetchLikedFeedIds();
+        const likedIds = await fetchLikedFeedIds(feedRepository);
         if (!isMounted) {
           return;
         }
@@ -529,9 +534,9 @@ const FeedPage = () => {
 
     try {
       if (wasLiked) {
-        await unlikeFeedItem(postId);
+        await unlikeFeedItem(feedRepository, postId);
       } else {
-        await likeFeedItem(postId);
+        await likeFeedItem(feedRepository, postId);
       }
     } catch (error) {
       setIsLiked((prev) => ({

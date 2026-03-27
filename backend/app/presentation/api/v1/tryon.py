@@ -16,8 +16,8 @@ from app.infrastructure.auth.security import get_current_user, get_user_by_token
 from app.infrastructure.cache.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
 from app.infrastructure.cache.tryon_rate_limit import enforce_tryon_rate_limit
 from app.infrastructure.db.db import AsyncSessionLocal, get_db
-from app.core.tryon_cleanup import run_tryon_cleanup
-from app.core.tryon_recovery import run_tryon_recovery
+from app.infrastructure.maintenance.tryon_cleanup import run_tryon_cleanup
+from app.infrastructure.maintenance.tryon_recovery import run_tryon_recovery
 from app.infrastructure.queue.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
