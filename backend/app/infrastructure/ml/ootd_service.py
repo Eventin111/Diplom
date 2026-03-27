@@ -18,9 +18,10 @@ if str(ML_ROOT) not in sys.path:
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from run.ootd_app.adapters import DiffusionAdapter, OpenPoseAdapter, ParsingAdapter
-from run.ootd_app.entities import InferenceRequest
-from run.ootd_app.usecases import RunOOTDInference
+from swipeit_ml.application.usecases.run_ootd_inference import RunOOTDInference
+from swipeit_ml.domain import ModelType, category_from_index
+from swipeit_ml.domain.entities import InferenceRequest
+from swipeit_ml.infrastructure.adapters import DiffusionAdapter, OpenPoseAdapter, ParsingAdapter
 
 
 class OOTDService:
@@ -41,7 +42,7 @@ class OOTDService:
         if self._runner is None:
             self._openpose = OpenPoseAdapter(self.gpu_id)
             self._parsing = ParsingAdapter(self.gpu_id)
-            self._diffusion = DiffusionAdapter(self.gpu_id, "hd")
+            self._diffusion = DiffusionAdapter(self.gpu_id, ModelType.HD)
             self._runner = RunOOTDInference(self._openpose, self._parsing, self._diffusion)
     
     def try_on(
@@ -81,15 +82,13 @@ class OOTDService:
             model_image.save(model_path)
             cloth_image.save(cloth_path)
             
-            category_dict = ["upperbody", "lowerbody", "dress"]
-            
             if model_type == "hd" and category != 0:
                 raise ValueError("model_type 'hd' requires category == 0")
             
             request = InferenceRequest(
                 gpu_id=self.gpu_id,
-                model_type=model_type,
-                category=category_dict[category],
+                model_type=ModelType(model_type),
+                category=category_from_index(category),
                 cloth_path=str(cloth_path),
                 model_path=str(model_path),
                 image_scale=scale,

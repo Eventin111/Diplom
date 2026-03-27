@@ -149,7 +149,7 @@ pip install torch==2.0.1 torchvision==0.15.2
 
 ```bash
 cd ml
-python download_models.py
+python scripts/download_models.py
 ```
 
 ### API
@@ -172,8 +172,20 @@ Diplom/
 │   ├── run_server.py
 │   └── app/core/config.py
 ├── ml/                # OOTDiffusion
-│   ├── run/           # Инференс
-│   └── download_models.py
+│   ├── swipeit_ml/
+│   │   ├── domain/
+│   │   ├── application/
+│   │   ├── infrastructure/
+│   │   │   ├── adapters/
+│   │   │   ├── config/
+│   │   │   └── runtime/
+│   │   └── presentation/
+│   ├── third_party/   # Vendor OOTDiffusion/OpenPose/HumanParsing
+│   ├── examples/      # Demo assets
+│   ├── tests/
+│   │   ├── unit/
+│   │   └── integration/
+│   └── scripts/       # Служебные утилиты
 ├── frontend/          # React frontend
 │   ├── src/core/      # Clean Architecture (domain/app/infra)
 │   ├── src/config/    # Конфигурация фронта

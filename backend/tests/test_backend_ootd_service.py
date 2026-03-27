@@ -7,11 +7,15 @@ from PIL import Image
 
 
 def stub_ml_modules():
-    run_pkg = types.ModuleType("run")
-    ootd_app_pkg = types.ModuleType("run.ootd_app")
-    adapters_module = types.ModuleType("run.ootd_app.adapters")
-    entities_module = types.ModuleType("run.ootd_app.entities")
-    usecases_module = types.ModuleType("run.ootd_app.usecases")
+    ml_pkg = types.ModuleType("swipeit_ml")
+    application_pkg = types.ModuleType("swipeit_ml.application")
+    usecases_pkg = types.ModuleType("swipeit_ml.application.usecases")
+    usecases_module = types.ModuleType("swipeit_ml.application.usecases.run_ootd_inference")
+    domain_pkg = types.ModuleType("swipeit_ml.domain")
+    entities_module = types.ModuleType("swipeit_ml.domain.entities")
+    enums_module = types.ModuleType("swipeit_ml.domain.enums")
+    infrastructure_pkg = types.ModuleType("swipeit_ml.infrastructure")
+    adapters_module = types.ModuleType("swipeit_ml.infrastructure.adapters")
 
     class OpenPoseAdapter:
         def __init__(self, gpu_id):
@@ -30,6 +34,16 @@ def stub_ml_modules():
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
+    class ModelType:
+        HD = "hd"
+        DC = "dc"
+
+        def __new__(cls, value):
+            return value
+
+    def category_from_index(index):
+        return ["upperbody", "lowerbody", "dress"][index]
+
     class RunOOTDInference:
         def __init__(self, openpose, parsing, diffusion):
             self.openpose = openpose
@@ -43,14 +57,22 @@ def stub_ml_modules():
     adapters_module.ParsingAdapter = ParsingAdapter
     adapters_module.DiffusionAdapter = DiffusionAdapter
     entities_module.InferenceRequest = InferenceRequest
+    domain_pkg.ModelType = ModelType
+    domain_pkg.category_from_index = category_from_index
+    enums_module.ModelType = ModelType
+    enums_module.category_from_index = category_from_index
     usecases_module.RunOOTDInference = RunOOTDInference
 
     return {
-        "run": run_pkg,
-        "run.ootd_app": ootd_app_pkg,
-        "run.ootd_app.adapters": adapters_module,
-        "run.ootd_app.entities": entities_module,
-        "run.ootd_app.usecases": usecases_module,
+        "swipeit_ml": ml_pkg,
+        "swipeit_ml.application": application_pkg,
+        "swipeit_ml.application.usecases": usecases_pkg,
+        "swipeit_ml.application.usecases.run_ootd_inference": usecases_module,
+        "swipeit_ml.domain": domain_pkg,
+        "swipeit_ml.domain.entities": entities_module,
+        "swipeit_ml.domain.enums": enums_module,
+        "swipeit_ml.infrastructure": infrastructure_pkg,
+        "swipeit_ml.infrastructure.adapters": adapters_module,
     }
 
 
