@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getTryOnSession, runTryOn, subscribeToTryOnSession } from '../../services/api/tryon';
+import { getTryOnSession } from '../../core/application/usecases/getTryOnSession';
+import { startTryOnSession } from '../../core/application/usecases/startTryOnSession';
+import { subscribeToTryOnSession } from '../../core/application/usecases/subscribeToTryOnSession';
+import { createApiTryOnRepository } from '../../core/infrastructure/repositories/apiTryOnRepository';
 import './TryOnPage.css';
 
 const INFERENCE_STEPS = ['Подбираем стиль', 'Уточняем посадку', 'Собираем образ', 'Финальный штрих'];
+const tryOnRepository = createApiTryOnRepository();
 
 const readPrimaryProfilePhoto = () => {
   try {
@@ -116,13 +120,13 @@ const TryOnPage = () => {
   };
 
   const syncTryOnSession = async (nextSessionId) => {
-    const payload = await getTryOnSession(nextSessionId);
+    const payload = await getTryOnSession(tryOnRepository, nextSessionId);
     applySessionUpdate(payload);
   };
 
   const connectToTryOnSession = (nextSessionId) => {
     closeTryOnSocket();
-    websocketRef.current = subscribeToTryOnSession(nextSessionId, {
+    websocketRef.current = subscribeToTryOnSession(tryOnRepository, nextSessionId, {
       onMessage: (payload) => {
         applySessionUpdate(payload);
       },
@@ -228,7 +232,7 @@ const TryOnPage = () => {
     closeTryOnSocket();
 
     try {
-      const payload = await runTryOn({
+      const payload = await startTryOnSession(tryOnRepository, {
         modelImage: profileModelPhoto,
         clothImage: clothImageInput,
         modelType: 'hd',

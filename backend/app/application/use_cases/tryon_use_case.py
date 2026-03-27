@@ -8,7 +8,7 @@ import base64
 from PIL import Image
 
 from app.application.dto.tryon_dto import TryOnRequest, TryOnResponse
-from app.infrastructure.ml.ootd_service import OOTDService
+from app.application.ports.tryon_gateway import TryOnGateway
 
 
 class TryOnUseCase:
@@ -21,7 +21,7 @@ class TryOnUseCase:
     - Формирование ответа
     """
     
-    def __init__(self, ml_service: OOTDService):
+    def __init__(self, ml_service: TryOnGateway):
         """
         Конструктор с внедрением зависимости.
         
