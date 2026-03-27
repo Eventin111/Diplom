@@ -11,7 +11,7 @@
 - **requirements.txt** — основной список зависимостей для запуска кода OOTDiffusion.
 - **requirements-ci.txt** — зависимости для CI, используемые при автоматическом тестировании.
 - **download_models.py** — скрипт для скачивания необходимых предобученных моделей и контрольных точек.
-- **ootd_service.py** — адаптер для использования ML-пайплайна из backend.
+- **download_models.py** — утилита подготовки весов для локального инференса и demo-сценариев.
 
 ## Папка `images/`
 
@@ -36,9 +36,9 @@
 - **unet_vton_2d_blocks.py** — блоки U-Net для VTON-потока.
 - **unet_vton_2d_condition.py** — условная генерация для VTON.
 
-## `ootd_service.py`
+## Интеграция с backend
 
-Обёртка/сервис для запуска модели как инфраструктурного адаптера поверх `run/ootd_app`.
+ML-пайплайн подключается к backend через [backend/app/infrastructure/ml/ootd_service.py](/Users/egor/Desktop/Diplom/backend/app/infrastructure/ml/ootd_service.py), а не через отдельный сервис внутри каталога `ml`.
 
 ## Папка `preprocess/` (предобработка данных)
 
@@ -141,7 +141,7 @@
 
 Поддерживаемые entrypoint'ы после очистки:
 
-- backend вызывает `ml/ootd_service.py`
+- backend вызывает `backend/app/infrastructure/ml/ootd_service.py`
 - CLI-инференс идёт через `run/run_ootd.py`
 - demo остаётся в `run/gradio_ootd.py`
 
