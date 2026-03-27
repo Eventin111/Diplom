@@ -23,6 +23,12 @@ def test_hash_password_and_verify_password():
     assert verify_password("wrong", hashed) is False
 
 
+def test_verify_password_returns_false_for_unknown_hash():
+    from app.core.hashing import verify_password
+
+    assert verify_password("secret123", "not-a-passlib-hash") is False
+
+
 def test_create_token_contains_subject_and_exp():
     security = load_security_module()
     token = security.create_token(sub=15, ttl_min=5)

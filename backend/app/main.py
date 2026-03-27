@@ -8,7 +8,7 @@ from app.infrastructure.db.schema_compat import ensure_schema_compatibility
 from app.infrastructure.queue.redis_client import close_redis_client
 from app.presentation.api.routes import api_router
 from app.core.errors import setup_exception_handlers
-from app import models  # noqa: F401
+from app.infrastructure.persistence import models  # noqa: F401
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
