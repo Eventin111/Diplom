@@ -114,6 +114,21 @@ class MediaRepository(BaseRepository[MediaAsset]):
         )
         return result.scalars().all()
 
+    async def get_by_owner(
+        self,
+        db: AsyncSession,
+        owner_user_id: int,
+        *,
+        limit: int = 100,
+    ) -> List[MediaAsset]:
+        result = await db.execute(
+            select(MediaAsset)
+            .where(MediaAsset.owner_user_id == owner_user_id)
+            .order_by(MediaAsset.created_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
     async def delete_many(self, db: AsyncSession, media_ids: list[int]) -> int:
         if not media_ids:
             return 0

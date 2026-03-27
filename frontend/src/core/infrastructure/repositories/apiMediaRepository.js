@@ -18,6 +18,38 @@ const normalizeUrl = (url) => {
   return `${appConfig.apiBaseUrl}/${url}`;
 };
 
+const requestWithAuth = async (path, init = {}, defaultErrorMessage) => {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Нужно войти в аккаунт, чтобы работать с медиа.');
+  }
+
+  const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    let detail = defaultErrorMessage;
+    try {
+      const payload = await response.json();
+      detail = payload?.detail || JSON.stringify(payload);
+    } catch (error) {
+      detail = await response.text();
+    }
+    throw new Error(detail || defaultErrorMessage);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+};
+
 export const createApiMediaRepository = () => ({
   async uploadMedia(file) {
     const token = getAuthToken();
@@ -59,6 +91,23 @@ export const createApiMediaRepository = () => ({
           }
         : payload.media
     };
+  },
+
+  async fetchMyMedia() {
+    const payload = await requestWithAuth('/api/v1/media/mine', {}, 'Ошибка загрузки медиа');
+    return Array.isArray(payload)
+      ? payload.map((item) => ({
+          ...item,
+          public_url: normalizeUrl(item.public_url)
+        }))
+      : [];
+  },
+
+  async deleteMedia(mediaId) {
+    return requestWithAuth(
+      `/api/v1/media/${mediaId}`,
+      { method: 'DELETE' },
+      'Ошибка удаления медиа'
+    );
   }
 });
-

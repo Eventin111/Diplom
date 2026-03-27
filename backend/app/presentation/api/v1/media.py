@@ -8,6 +8,7 @@ import os
 import logging
 
 from app.infrastructure.auth.security import get_current_user
+from app.core.config import settings
 from app.infrastructure.db.db import get_db
 from app.infrastructure.storage.local_media import build_local_media_path, ensure_local_media_dir
 from app.infrastructure.storage.s3 import s3_client
@@ -25,6 +26,28 @@ ALLOWED_CONTENT_TYPES = {
     "image/gif": MediaType.IMAGE,
     "image/webp": MediaType.IMAGE,
 }
+
+
+def build_media_public_url(media_id: int) -> str:
+    return f"{settings.API_V1}/media/{media_id}/file"
+
+
+def serialize_media(media) -> MediaResponse:
+    media_dict = {
+        "id": media.id,
+        "owner_user_id": media.owner_user_id,
+        "kind": media.kind,
+        "storage_key": media.storage_key,
+        "width": media.width,
+        "height": media.height,
+        "created_at": media.created_at,
+        "updated_at": media.updated_at,
+    }
+
+    if media.storage_key:
+        media_dict["public_url"] = build_media_public_url(media.id)
+
+    return MediaResponse(**media_dict)
 
 @router.post("/upload", response_model=MediaUploadResponse)
 async def upload_media(
@@ -68,7 +91,6 @@ async def upload_media(
         )
         
         # Формируем URL для ответа
-        from app.core.config import settings
         upload_url = f"{settings.API_V1}/media/{media.id}/file"
         
         logger.info(f"Файл загружен: {unique_filename}")
@@ -84,6 +106,28 @@ async def upload_media(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка загрузки файла: {str(e)}"
         )
+
+@router.get("/mine", response_model=list[MediaResponse])
+async def list_my_media(
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Вернуть список медиа текущего пользователя, исключая текущий аватар."""
+    media_repo = MediaRepository()
+    user_media = await media_repo.get_by_owner(db, current_user.id)
+    avatar_url = str(current_user.avatar_url or "")
+
+    items: list[MediaResponse] = []
+    for media in user_media:
+        media_response = serialize_media(media)
+        media_public_url = str(media_response.public_url or "")
+        if avatar_url and media_public_url and (
+            avatar_url == media_public_url or avatar_url.endswith(media_public_url)
+        ):
+            continue
+        items.append(media_response)
+
+    return items
 
 @router.get("/{media_id}", response_model=MediaResponse)
 async def get_media(
@@ -106,22 +150,7 @@ async def get_media(
         
         logger.info(f"Медиа найдено: id={media.id}, storage_key={media.storage_key}")
         
-        # Создаем объект ответа
-        media_dict = {
-            "id": media.id,
-            "owner_user_id": media.owner_user_id,
-            "kind": media.kind,
-            "storage_key": media.storage_key,
-            "width": media.width,
-            "height": media.height,
-            "created_at": media.created_at,
-            "updated_at": media.updated_at,
-        }
-        
-        if media.storage_key:
-            media_dict["public_url"] = f"{settings.API_V1}/media/{media.id}/file"
-        
-        response = MediaResponse(**media_dict)
+        response = serialize_media(media)
         logger.info(f"Возвращаем ответ: {response}")
         return response
         
@@ -165,3 +194,29 @@ async def get_media_file(
         )
 
     return Response(content=file_bytes, media_type=content_type)
+
+
+@router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_media(
+    media_id: int,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Удалить медиа текущего пользователя."""
+    media_repo = MediaRepository()
+    media = await media_repo.get(db, media_id)
+
+    if not media:
+        raise HTTPException(status_code=404, detail="Медиа не найдено")
+    if media.owner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Нет доступа к этому медиа")
+
+    media_public_url = build_media_public_url(media.id)
+    if str(current_user.avatar_url or "") == media_public_url:
+        current_user.avatar_url = None
+        db.add(current_user)
+        await db.commit()
+
+    await media_repo.delete_many(db, [media_id])
+    media_repo.delete_storage(media.storage_key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

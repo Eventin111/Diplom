@@ -94,4 +94,50 @@ describe('apiMediaRepository', () => {
 
     await expect(repository.uploadMedia(new File(['x'], 'x.png', { type: 'image/png' }))).rejects.toThrow('upload failed');
   });
+
+  it('loads current user media and normalizes public urls', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(
+      okResponse([
+        { id: 1, public_url: '/api/v1/media/1/file' },
+        { id: 2, public_url: 'https://cdn.example.com/media/2.png' }
+      ])
+    );
+    const repository = createApiMediaRepository();
+
+    await expect(repository.fetchMyMedia()).resolves.toEqual([
+      { id: 1, public_url: 'http://localhost:8000/api/v1/media/1/file' },
+      { id: 2, public_url: 'https://cdn.example.com/media/2.png' }
+    ]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/media/mine',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token'
+        })
+      })
+    );
+  });
+
+  it('deletes media through the api', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: jest.fn(),
+      text: jest.fn()
+    });
+    const repository = createApiMediaRepository();
+
+    await expect(repository.deleteMedia(15)).resolves.toBeNull();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/media/15',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token'
+        })
+      })
+    );
+  });
 });

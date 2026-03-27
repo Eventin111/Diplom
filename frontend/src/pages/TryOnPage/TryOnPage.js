@@ -3,11 +3,26 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getTryOnSession } from '../../core/application/usecases/getTryOnSession';
 import { startTryOnSession } from '../../core/application/usecases/startTryOnSession';
 import { subscribeToTryOnSession } from '../../core/application/usecases/subscribeToTryOnSession';
+import { createApiMediaRepository } from '../../core/infrastructure/repositories/apiMediaRepository';
 import { createApiTryOnRepository } from '../../core/infrastructure/repositories/apiTryOnRepository';
 import './TryOnPage.css';
 
 const INFERENCE_STEPS = ['Подбираем стиль', 'Уточняем посадку', 'Собираем образ', 'Финальный штрих'];
 const tryOnRepository = createApiTryOnRepository();
+const mediaRepository = createApiMediaRepository();
+
+const persistProfilePhotos = (photos, index) => {
+  localStorage.setItem('tryOnPhotos', JSON.stringify(photos));
+  localStorage.setItem('primaryPhotoIndex', String(index));
+};
+
+const normalizeProfilePhoto = (media) => ({
+  id: media.id,
+  mediaId: media.id,
+  url: media.public_url,
+  name: `Фото ${media.id}`,
+  date: media.created_at ? new Date(media.created_at).toLocaleDateString() : new Date().toLocaleDateString()
+});
 
 const readPrimaryProfilePhoto = () => {
   try {
@@ -167,6 +182,37 @@ const TryOnPage = () => {
     syncProfilePhoto();
     window.addEventListener('storage', syncProfilePhoto);
     return () => window.removeEventListener('storage', syncProfilePhoto);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncProfilePhotoFromServer = async () => {
+      try {
+        const mediaItems = await mediaRepository.fetchMyMedia();
+        if (cancelled || !Array.isArray(mediaItems) || mediaItems.length === 0) {
+          return;
+        }
+
+        const photos = mediaItems.map(normalizeProfilePhoto);
+        const savedIndex = Number(localStorage.getItem('primaryPhotoIndex') || 0);
+        const safeIndex =
+          Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < photos.length ? savedIndex : 0;
+        persistProfilePhotos(photos, safeIndex);
+        setProfileInfo({
+          photo: photos[safeIndex]?.url || '',
+          count: photos.length,
+          index: safeIndex
+        });
+      } catch (error) {
+        // Keep the local cache fallback when backend media cannot be loaded.
+      }
+    };
+
+    void syncProfilePhotoFromServer();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

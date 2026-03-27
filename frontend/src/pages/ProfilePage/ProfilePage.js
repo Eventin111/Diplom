@@ -8,6 +8,22 @@ import './ProfilePage.css';
 
 const mediaRepository = createApiMediaRepository();
 
+const persistTryOnPhotos = (photos) => {
+  localStorage.setItem('tryOnPhotos', JSON.stringify(photos));
+};
+
+const persistPrimaryPhotoIndex = (index) => {
+  localStorage.setItem('primaryPhotoIndex', String(index));
+};
+
+const normalizeProfilePhoto = (media) => ({
+  id: media.id,
+  mediaId: media.id,
+  url: media.public_url,
+  name: `Фото ${media.id}`,
+  date: media.created_at ? new Date(media.created_at).toLocaleDateString() : new Date().toLocaleDateString()
+});
+
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -83,6 +99,7 @@ const ProfilePage = () => {
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
   const [uploadError, setUploadError] = useState('');
+  const [isPhotosLoading, setIsPhotosLoading] = useState(false);
 
   if (!isAuthenticated) {
     navigate('/login');
@@ -147,11 +164,11 @@ const ProfilePage = () => {
 
         setTryOnPhotos((prevPhotos) => {
           const updatedPhotos = [...prevPhotos, ...tempPhotos];
-          localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
+          persistTryOnPhotos(updatedPhotos);
 
           if (prevPhotos.length === 0 && updatedPhotos.length > 0) {
             setPrimaryPhotoIndex(0);
-            localStorage.setItem('primaryPhotoIndex', '0');
+            persistPrimaryPhotoIndex(0);
           }
 
           return updatedPhotos;
@@ -161,23 +178,15 @@ const ProfilePage = () => {
           preparedFiles.map((item) => uploadMedia(mediaRepository, item.uploadFile))
         );
 
-        setTryOnPhotos((prevPhotos) => {
-          const uploadedPhotos = uploads.map((payload, index) => ({
-            id: payload.media.id,
-            mediaId: payload.media.id,
-            url: payload.upload_url || payload.media.public_url || tempPhotos[index].url,
-            name: preparedFiles[index].originalName,
-            date: tempPhotos[index].date
-          }));
+        const canonicalPhotos = (await mediaRepository.fetchMyMedia()).map(normalizeProfilePhoto);
+        setTryOnPhotos(canonicalPhotos);
+        persistTryOnPhotos(canonicalPhotos);
 
-          const updatedPhotos = prevPhotos.map((photo) => {
-            const tempIndex = tempPhotos.findIndex((tempPhoto) => tempPhoto.id === photo.id);
-            return tempIndex === -1 ? photo : uploadedPhotos[tempIndex];
-          });
-
-          localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
-          return updatedPhotos;
-        });
+        const savedIndex = Number(localStorage.getItem('primaryPhotoIndex') || 0);
+        const safeIndex =
+          Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < canonicalPhotos.length ? savedIndex : 0;
+        setPrimaryPhotoIndex(safeIndex);
+        persistPrimaryPhotoIndex(safeIndex);
       } catch (error) {
         setUploadError(error?.message || 'Не удалось загрузить фото');
       }
@@ -187,24 +196,37 @@ const ProfilePage = () => {
 
   const handleDeletePhoto = (index, e) => {
     e.stopPropagation();
-    const updatedPhotos = tryOnPhotos.filter((_, i) => i !== index);
-    setTryOnPhotos(updatedPhotos);
-    localStorage.setItem('tryOnPhotos', JSON.stringify(updatedPhotos));
-    
-    if (primaryPhotoIndex >= updatedPhotos.length) {
-      const newIndex = updatedPhotos.length > 0 ? updatedPhotos.length - 1 : 0;
-      setPrimaryPhotoIndex(newIndex);
-      localStorage.setItem('primaryPhotoIndex', newIndex.toString());
-    } else if (index < primaryPhotoIndex) {
-      setPrimaryPhotoIndex(primaryPhotoIndex - 1);
-      localStorage.setItem('primaryPhotoIndex', (primaryPhotoIndex - 1).toString());
-    }
+    setUploadError('');
+    void (async () => {
+      try {
+        const photo = tryOnPhotos[index];
+        if (photo?.mediaId) {
+          await mediaRepository.deleteMedia(photo.mediaId);
+        }
+
+        const updatedPhotos = tryOnPhotos.filter((_, i) => i !== index);
+        setTryOnPhotos(updatedPhotos);
+        persistTryOnPhotos(updatedPhotos);
+
+        if (primaryPhotoIndex >= updatedPhotos.length) {
+          const newIndex = updatedPhotos.length > 0 ? updatedPhotos.length - 1 : 0;
+          setPrimaryPhotoIndex(newIndex);
+          persistPrimaryPhotoIndex(newIndex);
+        } else if (index < primaryPhotoIndex) {
+          const nextIndex = primaryPhotoIndex - 1;
+          setPrimaryPhotoIndex(nextIndex);
+          persistPrimaryPhotoIndex(nextIndex);
+        }
+      } catch (error) {
+        setUploadError(error?.message || 'Не удалось удалить фото');
+      }
+    })();
   };
 
   const handleSetPrimary = (index, e) => {
     if (e) e.stopPropagation();
     setPrimaryPhotoIndex(index);
-    localStorage.setItem('primaryPhotoIndex', index.toString());
+    persistPrimaryPhotoIndex(index);
   };
 
   const triggerFileInput = () => {
@@ -248,6 +270,46 @@ const ProfilePage = () => {
     localStorage.setItem('appTheme', savedTheme);
     setThemeMode(savedTheme);
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || isGuest) {
+      return;
+    }
+
+    let cancelled = false;
+    const syncProfilePhotos = async () => {
+      setIsPhotosLoading(true);
+      try {
+        const mediaItems = await mediaRepository.fetchMyMedia();
+        if (cancelled) {
+          return;
+        }
+
+        const serverPhotos = mediaItems.map(normalizeProfilePhoto);
+        setTryOnPhotos(serverPhotos);
+        persistTryOnPhotos(serverPhotos);
+
+        const savedIndex = Number(localStorage.getItem('primaryPhotoIndex') || 0);
+        const safeIndex =
+          Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < serverPhotos.length ? savedIndex : 0;
+        setPrimaryPhotoIndex(safeIndex);
+        persistPrimaryPhotoIndex(safeIndex);
+      } catch (error) {
+        if (!cancelled) {
+          setUploadError(error?.message || 'Не удалось загрузить сохранённые фото');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsPhotosLoading(false);
+        }
+      }
+    };
+
+    void syncProfilePhotos();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isGuest]);
 
   const handleThemeChange = (nextTheme) => {
     if (!nextTheme || nextTheme === themeMode) {
@@ -385,7 +447,13 @@ const ProfilePage = () => {
                 />
               </div>
               
-              {tryOnPhotos.length === 0 ? (
+              {isPhotosLoading ? (
+                <div className="empty-photos">
+                  <div className="empty-photos-icon">⏳</div>
+                  <h4>Загружаем фото</h4>
+                  <p>Подтягиваем сохранённые фотографии с сервера</p>
+                </div>
+              ) : tryOnPhotos.length === 0 ? (
                 <div className="empty-photos">
                   <div className="empty-photos-icon">📷</div>
                   <h4>Нет загруженных фото</h4>

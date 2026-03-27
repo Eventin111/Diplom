@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import AnyUrl, BaseModel, validator
+from pydantic import BaseModel, validator
 
 from app.application.dto.media_dto import MediaCreate, MediaType, MediaBase, MediaUpdate
 
@@ -12,7 +12,7 @@ class MediaResponse(MediaBase):
     width: Optional[int] = None
     height: Optional[int] = None
     aspect_ratio: Optional[float] = None
-    public_url: Optional[AnyUrl] = None
+    public_url: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
