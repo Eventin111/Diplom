@@ -22,8 +22,6 @@ Our model checkpoints trained on [VITON-HD](https://github.com/shadow2496/VITON-
 ![demo](images/demo.png)&nbsp;
 ![workflow](images/workflow.png)&nbsp;
 
-[![CI](https://github.com/Eventin111/Diplom/actions/workflows/ci.yml/badge.svg)](https://github.com/Eventin111/Diplom/actions/workflows/ci.yml)
-
 ## Installation
 1. Clone the repository
 

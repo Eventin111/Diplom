@@ -214,9 +214,11 @@ frontend/pnpm-debug.log*
 # ML артефакты (веса/результаты)
 # ====================================
 ml/checkpoints/
+ml/images_output/
 ml/results/
 ml/outputs/
 ml/runs/
 *.ckpt
 *.pt
 *.pth
+*.uuid

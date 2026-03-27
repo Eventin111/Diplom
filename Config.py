@@ -79,8 +79,13 @@ class FrontendSettings:
 @dataclass(frozen=True)
 class MLSettings:
     root_dir: Path
+    package_dir: Path
+    third_party_dir: Path
     checkpoints_dir: Path
+    examples_dir: Path
     outputs_dir: Path
+    unit_tests_dir: Path
+    integration_tests_dir: Path
     device: str
 
 
@@ -122,10 +127,16 @@ def load_frontend_settings() -> FrontendSettings:
 
 def load_ml_settings() -> MLSettings:
     ml_root = ROOT_DIR / "ml"
+    tests_root = ml_root / "tests"
     return MLSettings(
         root_dir=ml_root,
+        package_dir=ml_root / "swipeit_ml",
+        third_party_dir=ml_root / "third_party",
         checkpoints_dir=ml_root / "checkpoints",
-        outputs_dir=ml_root / "outputs",
+        examples_dir=ml_root / "examples",
+        outputs_dir=ml_root / "images_output",
+        unit_tests_dir=tests_root / "unit",
+        integration_tests_dir=tests_root / "integration",
         device=os.getenv("ML_DEVICE", "cuda"),
     )
 
@@ -141,4 +152,3 @@ def load_project_config() -> ProjectConfig:
 
 
 settings = load_project_config()
-

@@ -11,7 +11,7 @@ Frontend часть дипломного проекта с разделение�
   - `src/pages`, `src/components`, `src/context` - presentation layer
 - Единая конфигурация:
   - `src/config/appConfig.js` - интерфейс к переменным окружения внутри frontend
-  - `Config.py` - отдельный конфиг-файл
+  - `src/config/index.js` - единая точка экспорта frontend-конфига
 - Unit-тесты для domain/application/infrastructure/utils.
 - Покрытие тестами контролируется через Jest `coverageThreshold >= 70%`.
 
@@ -67,5 +67,4 @@ npm run test:coverage
    - password: `123456`
 4. Либо выбрать гостевой вход.
 5. Проверить ленту, профиль и регистрацию (все данные сохраняются в `localStorage`).
-
 
