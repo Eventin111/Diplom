@@ -6,7 +6,7 @@ from jose import ExpiredSignatureError, JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.db import get_db
+from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.user_repo import UserRepository
 
 
