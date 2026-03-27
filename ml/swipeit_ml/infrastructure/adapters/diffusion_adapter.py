@@ -9,12 +9,21 @@ from swipeit_ml.infrastructure.runtime.paths import ensure_third_party_on_path
 
 ensure_third_party_on_path()
 
-from ootd.inference_ootd import OOTDiffusion
+OOTDiffusion = None
+
+
+def _get_ootd_diffusion_cls():
+    global OOTDiffusion
+    if OOTDiffusion is None:
+        from ootd.inference_ootd import OOTDiffusion as _OOTDiffusion
+
+        OOTDiffusion = _OOTDiffusion
+    return OOTDiffusion
 
 
 class DiffusionAdapter(DiffusionPort):
     def __init__(self, gpu_id: int, model_type: ModelType | str):
-        self._diffusion = OOTDiffusion(
+        self._diffusion = _get_ootd_diffusion_cls()(
             gpu_id=gpu_id,
             unet_checkpoint_path=get_unet_checkpoint_path(model_type),
         )

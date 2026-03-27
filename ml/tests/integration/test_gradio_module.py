@@ -1,7 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 
 class TestGradioModuleImport(unittest.TestCase):
@@ -30,30 +30,21 @@ class TestGradioModuleImport(unittest.TestCase):
         ml_root = str(Path(__file__).resolve().parents[2])
         sys.path.insert(0, ml_root)
 
-        # Patch heavy models to dummy ones so import doesn't download weights.
-        class DummyModel:
-            def __init__(self, *_args, **_kwargs):
-                pass
+        # Reload in case it was already imported by earlier tests.
+        if "swipeit_ml.presentation.gradio_demo" in sys.modules:
+            del sys.modules["swipeit_ml.presentation.gradio_demo"]
+        import swipeit_ml.presentation.gradio_demo as gradio_mod  # noqa: F401
 
-            def __call__(self, *args, **kwargs):
-                return []
+        # Clean up sys.path addition to avoid affecting other tests
+        sys.path.remove(ml_root)
 
-        with patch("preprocess.openpose.run_openpose.OpenPose", DummyModel), patch(
-            "preprocess.humanparsing.run_parsing.Parsing", DummyModel
-        ), patch("ootd.inference_ootd_hd.OOTDiffusionHD", DummyModel), patch(
-            "ootd.inference_ootd_dc.OOTDiffusionDC", DummyModel
-        ):
-            # reload in case it was already imported by earlier tests
-            if "swipeit_ml.presentation.gradio_demo" in sys.modules:
-                del sys.modules["swipeit_ml.presentation.gradio_demo"]
-            import swipeit_ml.presentation.gradio_demo as gradio_mod  # noqa: F401
-
-            # Clean up sys.path addition to avoid affecting other tests
-            sys.path.remove(ml_root)
-
-            # ensure basic attributes exist
-            self.assertTrue(hasattr(gradio_mod, "process_hd"))
-            self.assertTrue(hasattr(gradio_mod, "process_dc"))
+        # Importing the module should not initialize heavy models eagerly.
+        self.assertTrue(hasattr(gradio_mod, "process_hd"))
+        self.assertTrue(hasattr(gradio_mod, "process_dc"))
+        self.assertIsNone(gradio_mod.OpenPose)
+        self.assertIsNone(gradio_mod.Parsing)
+        self.assertIsNone(gradio_mod.OOTDiffusionHD)
+        self.assertIsNone(gradio_mod.OOTDiffusionDC)
 
 
 if __name__ == "__main__":

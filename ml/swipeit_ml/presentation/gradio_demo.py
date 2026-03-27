@@ -22,11 +22,49 @@ from swipeit_ml.infrastructure.runtime import ensure_third_party_on_path, get_ex
 
 ensure_third_party_on_path()
 
-from ootd.inference_ootd_dc import OOTDiffusionDC
-from ootd.inference_ootd_hd import OOTDiffusionHD
-from preprocess.humanparsing.run_parsing import Parsing
-from preprocess.openpose.run_openpose import OpenPose
 from swipeit_ml.application.services.masking import get_mask_location
+
+
+OOTDiffusionDC = None
+OOTDiffusionHD = None
+Parsing = None
+OpenPose = None
+
+
+def _get_openpose_cls():
+    global OpenPose
+    if OpenPose is None:
+        from preprocess.openpose.run_openpose import OpenPose as _OpenPose
+
+        OpenPose = _OpenPose
+    return OpenPose
+
+
+def _get_parsing_cls():
+    global Parsing
+    if Parsing is None:
+        from preprocess.humanparsing.run_parsing import Parsing as _Parsing
+
+        Parsing = _Parsing
+    return Parsing
+
+
+def _get_ootd_hd_cls():
+    global OOTDiffusionHD
+    if OOTDiffusionHD is None:
+        from ootd.inference_ootd_hd import OOTDiffusionHD as _OOTDiffusionHD
+
+        OOTDiffusionHD = _OOTDiffusionHD
+    return OOTDiffusionHD
+
+
+def _get_ootd_dc_cls():
+    global OOTDiffusionDC
+    if OOTDiffusionDC is None:
+        from ootd.inference_ootd_dc import OOTDiffusionDC as _OOTDiffusionDC
+
+        OOTDiffusionDC = _OOTDiffusionDC
+    return OOTDiffusionDC
 
 
 openpose_model_hd = None
@@ -43,18 +81,18 @@ def _ensure_models_initialized():
     global openpose_model_dc, parsing_model_dc, ootd_model_dc
 
     if openpose_model_hd is None:
-        openpose_model_hd = OpenPose(0)
+        openpose_model_hd = _get_openpose_cls()(0)
     if parsing_model_hd is None:
-        parsing_model_hd = Parsing(0)
+        parsing_model_hd = _get_parsing_cls()(0)
     if ootd_model_hd is None:
-        ootd_model_hd = OOTDiffusionHD(0)
+        ootd_model_hd = _get_ootd_hd_cls()(0)
 
     if openpose_model_dc is None:
-        openpose_model_dc = OpenPose(1)
+        openpose_model_dc = _get_openpose_cls()(1)
     if parsing_model_dc is None:
-        parsing_model_dc = Parsing(1)
+        parsing_model_dc = _get_parsing_cls()(1)
     if ootd_model_dc is None:
-        ootd_model_dc = OOTDiffusionDC(1)
+        ootd_model_dc = _get_ootd_dc_cls()(1)
 
 
 category_dict = ["upperbody", "lowerbody", "dress"]
