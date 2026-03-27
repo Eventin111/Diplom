@@ -155,6 +155,13 @@ describe('apiTryOnRepository', () => {
     await expect(repository.getTryOnSession(55)).rejects.toThrow('Try-on session request failed: 500 boom');
   });
 
+  it('falls back to response text when try-on session error is not json', async () => {
+    global.fetch.mockResolvedValueOnce(errorResponse({ status: 503, text: 'service unavailable', jsonFails: true }));
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.getTryOnSession(55)).rejects.toThrow('Try-on session request failed: 503 service unavailable');
+  });
+
   it('subscribes to websocket events and routes handlers', () => {
     localStorage.setItem('swipelt_token', 'token');
     const onMessage = jest.fn();
@@ -178,6 +185,14 @@ describe('apiTryOnRepository', () => {
     expect(onMessage).toHaveBeenCalledWith({ status: 'queued' });
     expect(onError).toHaveBeenCalledTimes(2);
     expect(onClose).toHaveBeenCalledWith({ code: 1000 });
+  });
+
+  it('builds websocket url without token query when session token is absent', () => {
+    const repository = createApiTryOnRepository();
+
+    const socket = repository.subscribeToTryOnSession(77);
+
+    expect(socket.url).toBe('ws://localhost:8000/api/v1/tryon/sessions/77/ws');
   });
 
   it('surfaces backend error details for failed try-on requests', async () => {

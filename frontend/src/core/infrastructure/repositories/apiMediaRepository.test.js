@@ -95,6 +95,29 @@ describe('apiMediaRepository', () => {
     await expect(repository.uploadMedia(new File(['x'], 'x.png', { type: 'image/png' }))).rejects.toThrow('upload failed');
   });
 
+  it('keeps empty upload urls and null media payloads intact', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(
+      okResponse({
+        upload_url: '',
+        media: null
+      })
+    );
+    const repository = createApiMediaRepository();
+
+    await expect(repository.uploadMedia(new File(['x'], 'x.png', { type: 'image/png' }))).resolves.toEqual({
+      upload_url: '',
+      media: null
+    });
+  });
+
+  it('requires auth token for media listing requests', async () => {
+    const repository = createApiMediaRepository();
+
+    await expect(repository.fetchMyMedia()).rejects.toThrow('Нужно войти в аккаунт, чтобы работать с медиа.');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it('loads current user media and normalizes public urls', async () => {
     localStorage.setItem('swipelt_token', 'token');
     global.fetch.mockResolvedValueOnce(
@@ -119,6 +142,14 @@ describe('apiMediaRepository', () => {
     );
   });
 
+  it('returns an empty list when media endpoint responds with a non-array payload', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(okResponse({ items: [] }));
+    const repository = createApiMediaRepository();
+
+    await expect(repository.fetchMyMedia()).resolves.toEqual([]);
+  });
+
   it('deletes media through the api', async () => {
     localStorage.setItem('swipelt_token', 'token');
     global.fetch.mockResolvedValueOnce({
@@ -139,5 +170,13 @@ describe('apiMediaRepository', () => {
         })
       })
     );
+  });
+
+  it('surfaces text fallback when delete error payload is not json', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(errorResponse({ text: 'cannot delete', jsonFails: true }));
+    const repository = createApiMediaRepository();
+
+    await expect(repository.deleteMedia(15)).rejects.toThrow('cannot delete');
   });
 });

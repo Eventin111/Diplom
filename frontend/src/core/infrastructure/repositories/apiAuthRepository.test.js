@@ -128,6 +128,15 @@ describe('apiAuthRepository', () => {
     );
   });
 
+  it('uses response text when login fails with a non-json payload', async () => {
+    const storage = createMemoryStorage();
+    global.fetch.mockResolvedValueOnce(errorResponse('Bad gateway', false));
+
+    const repository = createApiAuthRepository({ storage, config: createConfig() });
+
+    await expect(repository.login({ email: 'user@mail.com', password: 'secret' })).rejects.toThrow('Bad gateway');
+  });
+
   it('registers and then logs in', async () => {
     const storage = createMemoryStorage();
     global.fetch
@@ -149,6 +158,31 @@ describe('apiAuthRepository', () => {
     expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
+  it('continues registration flow when register endpoint returns 204', async () => {
+    const storage = createMemoryStorage();
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: jest.fn(),
+        text: jest.fn().mockResolvedValue('')
+      })
+      .mockResolvedValueOnce(okResponse({ access_token: 'reg-204-token' }))
+      .mockResolvedValueOnce(
+        okResponse({ id: 4, email: 'reg204@mail.com', username: 'reg204', avatar_url: 'https://img.test/u4.png' })
+      );
+
+    const repository = createApiAuthRepository({ storage, config: createConfig() });
+    const result = await repository.register({
+      email: 'reg204@mail.com',
+      password: 'secret',
+      username: 'reg204'
+    });
+
+    expect(result.token).toBe('reg-204-token');
+    expect(result.user.username).toBe('reg204');
+  });
+
   it('updates profile and persists the returned user', async () => {
     const storage = createMemoryStorage();
     storage.setItem(authStorageKeys.token, 'api-token');
@@ -167,6 +201,26 @@ describe('apiAuthRepository', () => {
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({ username: 'updated', avatar_url: 'https://img.test/new.png' })
+      })
+    );
+  });
+
+  it('sends email-only profile updates without persisting when token is missing', async () => {
+    const storage = createMemoryStorage();
+    global.fetch.mockResolvedValueOnce(
+      okResponse({ id: 9, email: 'new@mail.com', username: 'user9', avatar_url: 'https://img.test/u9.png' })
+    );
+
+    const repository = createApiAuthRepository({ storage, config: createConfig() });
+    const user = await repository.updateProfile({ email: 'new@mail.com' });
+
+    expect(user.email).toBe('new@mail.com');
+    expect(storage.getItem(authStorageKeys.user)).toBeNull();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/auth/me',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ email: 'new@mail.com' })
       })
     );
   });
