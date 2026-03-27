@@ -116,7 +116,9 @@ jobs:
         run: >
           npm run test:coverage -- --watch=false
           --coverageReporters=text
+          --coverageReporters=html
           --coverageReporters=lcov
+          --coverageReporters=cobertura
           --coverageReporters=json-summary
 
       - name: Upload frontend coverage artifact
