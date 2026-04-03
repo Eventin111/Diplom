@@ -43,10 +43,27 @@ export const apiFetch = async (path, options = {}) => {
     requestHeaders.Authorization = `Bearer ${resolvedToken}`;
   }
 
-  const response = await fetch(buildApiUrl(path), {
-    ...restOptions,
-    headers: requestHeaders
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), appConfig.apiRequestTimeoutMs);
+  let response;
+
+  try {
+    response = await fetch(buildApiUrl(path), {
+      ...restOptions,
+      headers: requestHeaders,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Превышено время ожидания API (${appConfig.apiRequestTimeoutMs} мс)`);
+    }
+    if (error instanceof TypeError) {
+      throw new Error('Сетевой доступ к API недоступен. Проверь backend, URL и CORS.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const payload = await parseResponsePayload(response);
   if (!response.ok) {

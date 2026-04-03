@@ -29,15 +29,31 @@ export const createApiAuthRepository = (deps = {}) => {
   const fetchJson = async (path, init = {}) => {
     const token = getToken();
     const headers = new Headers(init.headers || {});
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), appConfig.apiRequestTimeoutMs);
 
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
 
-    const response = await fetch(buildUrl(path), {
-      ...init,
-      headers
-    });
+    let response;
+    try {
+      response = await fetch(buildUrl(path), {
+        ...init,
+        headers,
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`Превышено время ожидания API (${appConfig.apiRequestTimeoutMs} мс)`);
+      }
+      if (error instanceof TypeError) {
+        throw new Error('Сетевой доступ к API недоступен. Проверь backend, URL и CORS.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       let detail = 'Request failed';
