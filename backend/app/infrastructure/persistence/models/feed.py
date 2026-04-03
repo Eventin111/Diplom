@@ -9,3 +9,6 @@ class FeedItem(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     garment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("garments.id"), nullable=True)
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user = relationship("User", lazy="joined")
+    garment = relationship("Garment", lazy="joined")

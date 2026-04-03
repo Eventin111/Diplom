@@ -82,36 +82,45 @@ class FeedRepository(BaseRepository[FeedItem]):
 
     async def get_feed_with_stats(self, db: AsyncSession, current_user_id: Optional[int] = None, skip: int = 0, limit: int = 20) -> List[dict]:
         from app.infrastructure.persistence.models.likes import Like
-        
+
         # Получаем посты
         feed_items = await self.get_global_feed(db, skip, limit)
-        
+
         if not feed_items:
             return []
-        
+
         # Собираем ID постов для статистики
         feed_item_ids = [item.id for item in feed_items]
-        
-        # Запрос количества лайков для каждого поста
-        likes_count_query = (
+
+        # Количество лайков по каждому посту
+        likes_count_rows = await db.execute(
             select(Like.feed_item_id, func.count(Like.id).label('likes_count'))
             .where(Like.feed_item_id.in_(feed_item_ids))
             .group_by(Like.feed_item_id)
-            .subquery()
         )
-        
+        likes_count_map = {
+            feed_item_id: likes_count for feed_item_id, likes_count in likes_count_rows.all()
+        }
+
+        # Какие посты лайкнул текущий пользователь
+        liked_feed_item_ids = set()
+        if current_user_id is not None:
+            liked_rows = await db.execute(
+                select(Like.feed_item_id).where(
+                    Like.feed_item_id.in_(feed_item_ids),
+                    Like.user_id == current_user_id,
+                )
+            )
+            liked_feed_item_ids = {feed_item_id for (feed_item_id,) in liked_rows.all()}
+
         # Формируем результат
         result = []
         for item in feed_items:
             item_data = {
                 "feed_item": item,
-                "likes_count": 0,
-                "is_liked": False
+                "likes_count": int(likes_count_map.get(item.id, 0) or 0),
+                "is_liked": item.id in liked_feed_item_ids,
             }
-            
-            # В реальном проекте нужно добавить подсчет лайков
-            # и проверку лайка текущего пользователя
-            
             result.append(item_data)
-        
+
         return result
