@@ -2,19 +2,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.infrastructure.db.db import Base, engine
-from app.infrastructure.db.schema_compat import ensure_schema_compatibility
-from app.infrastructure.queue.redis_client import close_redis_client
-from app.presentation.api.routes import api_router
-from app.core.errors import setup_exception_handlers
-from app.infrastructure.persistence import models  # noqa: F401
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.errors import setup_exception_handlers
 from app.core.hashing import hash_password
+from app.infrastructure.db.db import Base, engine
+from app.infrastructure.db.schema_compat import ensure_schema_compatibility
+from app.infrastructure.persistence import models  # noqa: F401
 from app.infrastructure.persistence.models.feed import FeedItem
 from app.infrastructure.persistence.models.user import User
+from app.infrastructure.queue.redis_client import close_redis_client
+from app.presentation.api.routes import api_router
 
 
 DEMO_FEED_CAPTIONS = [
@@ -27,11 +27,26 @@ DEMO_FEED_CAPTIONS = [
 ]
 
 
+async def ensure_demo_user_exists() -> None:
+    async with AsyncSession(engine) as session:
+        result = await session.execute(select(User).where(User.email == "test@mail.ru"))
+        existing_user = result.scalar_one_or_none()
+        if existing_user is not None:
+            return
+
+        session.add(
+            User(
+                email="test@mail.ru",
+                username="testuser",
+                hashed_password=hash_password("123123"),
+            )
+        )
+        await session.commit()
+
+
 async def seed_demo_feed() -> None:
     async with AsyncSession(engine) as session:
-        result = await session.execute(
-            select(User).where(User.email == "demo-feed@swipelt.local")
-        )
+        result = await session.execute(select(User).where(User.email == "demo-feed@swipelt.local"))
         demo_user = result.scalar_one_or_none()
 
         if demo_user is None:
@@ -70,6 +85,7 @@ async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await ensure_schema_compatibility(engine)
+    await ensure_demo_user_exists()
     await seed_demo_feed()
     try:
         yield
@@ -79,7 +95,6 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="SwipeIt Backend (MVP)", lifespan=lifespan)
 
-# Настройка обработчиков исключений
 setup_exception_handlers(app)
 
 app.add_middleware(
@@ -93,6 +108,8 @@ app.add_middleware(
 
 app.include_router(api_router, prefix=settings.API_V1)
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

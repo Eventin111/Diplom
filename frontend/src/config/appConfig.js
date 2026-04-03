@@ -25,7 +25,7 @@ export const appConfig = Object.freeze({
   }),
   demoAccount: Object.freeze({
     email: 'test@mail.ru',
-    password: '123456',
+    password: '123123',
     username: 'testuser'
   }),
   guestAccount: Object.freeze({

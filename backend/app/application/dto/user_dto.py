@@ -7,14 +7,14 @@ from pydantic import BaseModel, EmailStr, Field, validator
 class UsernameValidationMixin:
     @validator("username", check_fields=False)
     def username_alphanumeric(cls, value):
-        if value and not re.match("^[a-zA-Z0-9_]+$", value):
-            raise ValueError("Username may contain only letters, numbers, and underscores")
+        if value and not re.match(r"^[a-zA-Z0-9_а-яА-ЯёЁ]+$", value):
+            raise ValueError("Username may contain only letters (Latin/Cyrillic), numbers, and underscores")
         return value
 
 
 class UserBase(UsernameValidationMixin, BaseModel):
     email: EmailStr
-    username: str = Field(..., min_length=3, max_length=50, regex="^[a-zA-Z0-9_]+$")
+    username: str = Field(..., min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_а-яА-ЯёЁ]+$")
 
 
 class UserCreate(UserBase):
@@ -31,5 +31,5 @@ class UserCreate(UserBase):
 
 class UserUpdate(UsernameValidationMixin, BaseModel):
     email: Optional[EmailStr] = None
-    username: Optional[str] = Field(None, min_length=3, max_length=50, regex="^[a-zA-Z0-9_]+$")
+    username: Optional[str] = Field(None, min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_а-яА-ЯёЁ]+$")
     avatar_url: Optional[str] = None

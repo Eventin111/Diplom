@@ -1,10 +1,15 @@
-import { isValidEmail, isValidPassword, isValidUsername } from '../../domain/services/authPolicy';
+import {
+  isValidEmail,
+  isValidPassword,
+  isValidUsername,
+  isPasswordNotOnlyDigits
+} from '../../domain/services/authPolicy';
 
 export const registerUser = async (authRepository, payload) => {
   const { email, password, username } = payload;
 
   if (!isValidUsername(username)) {
-    throw new Error('Имя пользователя должно содержать не менее 3 символов');
+    throw new Error('Имя пользователя: минимум 3 символа, только буквы/цифры/подчеркивание');
   }
 
   if (!isValidEmail(email)) {
@@ -15,6 +20,9 @@ export const registerUser = async (authRepository, payload) => {
     throw new Error('Пароль должен содержать не менее 6 символов');
   }
 
+  if (!isPasswordNotOnlyDigits(password)) {
+    throw new Error('Пароль не может состоять только из цифр');
+  }
+
   return authRepository.register({ email, password, username });
 };
-
