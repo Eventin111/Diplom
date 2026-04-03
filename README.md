@@ -65,7 +65,7 @@ conda activate ootd
 Создай `.env` в корне проекта:
 
 ```env
-DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5432/swipeit
+DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5433/swipeit
 SECRET_KEY=dev-secret-key
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin
@@ -86,7 +86,7 @@ docker-compose up -d postgres minio redis
 
 После запуска будут доступны:
 
-- PostgreSQL: `localhost:5432`
+- PostgreSQL: `localhost:5433`
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
 - Redis: `localhost:6379`
