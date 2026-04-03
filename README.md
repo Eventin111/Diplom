@@ -62,20 +62,29 @@ conda activate ootd
 
 ### 3. Настройка окружения
 
-Создай `.env` в корне проекта:
+Создай `.env` на основе шаблона:
+
+```bash
+cp .env.example .env
+```
+
+Заполни в `.env` секреты и пароли (`CHANGE_ME_...`), затем проверь ключевые переменные:
 
 ```env
-DB_URL=postgresql://postgres:swipeit-gon-make-it@localhost:5433/swipeit
-SECRET_KEY=dev-secret-key
+DB_URL=postgresql://postgres:CHANGE_ME_DB_PASSWORD@localhost:5433/swipeit
+SECRET_KEY=CHANGE_ME_SECRET_KEY
 S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin123
+S3_ACCESS_KEY=CHANGE_ME_S3_ACCESS_KEY
+S3_SECRET_KEY=CHANGE_ME_S3_SECRET_KEY
 S3_BUCKET_NAME=swipeit-media
 S3_REGION=us-east-1
 S3_SECURE=false
 REDIS_URL=redis://localhost:6379/0
 CORS_ORIGINS=["http://localhost:3000"]
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+POSTGRES_PASSWORD=CHANGE_ME_DB_PASSWORD
+MINIO_ROOT_USER=CHANGE_ME_MINIO_USER
+MINIO_ROOT_PASSWORD=CHANGE_ME_MINIO_PASSWORD
 ```
 
 ### 4. Запуск БД, MinIO и Redis
