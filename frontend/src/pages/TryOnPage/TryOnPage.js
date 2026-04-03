@@ -284,7 +284,7 @@ const TryOnPage = () => {
         modelType: 'hd',
         category: 0,
         scale: 2.0,
-        numSteps: 4,
+        numSteps: 3,
         numSamples: 1,
         seed: -1
       });
