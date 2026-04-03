@@ -25,27 +25,71 @@
 - повторный запуск за тот же день не создаёт дублей
 - данные за день пересчитываются и обновляются
 
+## Prod-ready настройки
+
+- креды БД не захардкожены в DAG/скрипте
+- `BATCH_DB_URL` обязателен (fail-fast при отсутствии)
+- ретраи/таймауты/конкурентность вынесены в переменные окружения:
+  - `SWIPEIT_DAG_RETRIES`
+  - `SWIPEIT_DAG_RETRY_DELAY_MINUTES`
+  - `SWIPEIT_TASK_TIMEOUT_MINUTES`
+  - `SWIPEIT_DAGRUN_TIMEOUT_MINUTES`
+  - `SWIPEIT_MAX_ACTIVE_RUNS`
+  - `SWIPEIT_MAX_ACTIVE_TASKS`
+- правило "прерванной примерки" параметризовано:
+  - `TRYON_INTERRUPTED_STATUSES` (по умолчанию `failed`)
+
 ## Локальный запуск Airflow
 
-1. Собери batch image с тегом `swipeit-batch:latest`:
+1. Создай `.env` для `batch/airflow/docker-compose.airflow.yml`:
+
+```bash
+cp batch/airflow/.env.example batch/airflow/.env
+```
+
+```env
+BATCH_DB_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/swipeit
+SWIPEIT_BATCH_IMAGE=swipeit-batch:latest
+SWIPEIT_DOCKER_NETWORK=diplom_default
+
+# опционально:
+TRYON_INTERRUPTED_STATUSES=failed
+SWIPEIT_DAG_SCHEDULE=0 2 * * *
+SWIPEIT_DAG_CATCHUP=true
+SWIPEIT_DAG_RETRIES=2
+SWIPEIT_DAG_RETRY_DELAY_MINUTES=5
+SWIPEIT_TASK_TIMEOUT_MINUTES=30
+SWIPEIT_DAGRUN_TIMEOUT_MINUTES=60
+SWIPEIT_MAX_ACTIVE_RUNS=1
+SWIPEIT_MAX_ACTIVE_TASKS=2
+
+# Airflow UI админ:
+AIRFLOW_ADMIN_USERNAME=admin
+AIRFLOW_ADMIN_PASSWORD=admin
+AIRFLOW_ADMIN_FIRSTNAME=Air
+AIRFLOW_ADMIN_LASTNAME=Flow
+AIRFLOW_ADMIN_EMAIL=admin@example.com
+```
+
+2. Собери batch image с тегом `swipeit-batch:latest`:
 
 ```bash
 docker build -t swipeit-batch:latest backend/batch
 ```
 
-2. Запусти Airflow:
+3. Запусти Airflow:
 
 ```bash
 docker compose -f batch/airflow/docker-compose.airflow.yml up -d
 ```
 
-3. Открой UI:
+4. Открой UI:
 
 - URL: `http://localhost:8080`
 - логин: `admin`
 - пароль: `admin`
 
-4. Включи DAG `swipeit_daily_metrics`.
+5. Включи DAG `swipeit_daily_metrics`.
 
 ## Backfill (демонстрация)
 

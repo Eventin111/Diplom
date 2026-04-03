@@ -14,12 +14,10 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Iterable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
-
-DEFAULT_DB_URL = "postgresql://postgres:swipeit-gon-make-it@localhost:5433/swipeit"
 
 
 @dataclass(frozen=True)
@@ -48,10 +46,18 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-url",
-        default=os.getenv("BATCH_DB_URL") or os.getenv("DB_URL") or DEFAULT_DB_URL,
+        default=os.getenv("BATCH_DB_URL") or os.getenv("DB_URL"),
         help="PostgreSQL URL. Can also be set via BATCH_DB_URL or DB_URL.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--interrupted-statuses",
+        default=os.getenv("TRYON_INTERRUPTED_STATUSES", "failed"),
+        help="Comma-separated try-on statuses treated as interrupted (default: failed).",
+    )
+    args = parser.parse_args()
+    if not args.db_url:
+        parser.error("PostgreSQL URL is required. Pass --db-url or set BATCH_DB_URL/DB_URL.")
+    return args
 
 
 def _to_async_db_url(db_url: str) -> str:
@@ -66,6 +72,13 @@ def _build_utc_day_window(metric_day: date) -> tuple[datetime, datetime]:
     start = datetime.combine(metric_day, time.min).replace(tzinfo=timezone.utc)
     end = start + timedelta(days=1)
     return start, end
+
+
+def _parse_statuses_csv(raw: str) -> tuple[str, ...]:
+    statuses = tuple(sorted({part.strip().lower() for part in str(raw).split(",") if part.strip()}))
+    if not statuses:
+        raise ValueError("Interrupted statuses list cannot be empty")
+    return statuses
 
 
 async def _ensure_target_table(conn) -> None:
@@ -91,6 +104,24 @@ async def _ensure_target_table(conn) -> None:
     )
 
 
+async def _ensure_source_tables(conn, table_names: Iterable[str]) -> None:
+    rows = await conn.execute(
+        text(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ANY(:table_names)
+            """
+        ),
+        {"table_names": list(table_names)},
+    )
+    existing = {str(name) for (name,) in rows.fetchall()}
+    missing = sorted(set(table_names) - existing)
+    if missing:
+        raise RuntimeError(f"Missing source tables for metrics job: {', '.join(missing)}")
+
+
 async def _count_by_day(conn, table_name: str, window_start: datetime, window_end: datetime) -> int:
     result = await conn.execute(
         text(
@@ -106,7 +137,11 @@ async def _count_by_day(conn, table_name: str, window_start: datetime, window_en
     return int(result.scalar_one())
 
 
-async def _collect_metrics(conn, metric_day: date) -> DailyProjectMetrics:
+async def _collect_metrics(
+    conn,
+    metric_day: date,
+    interrupted_statuses: tuple[str, ...],
+) -> DailyProjectMetrics:
     window_start, window_end = _build_utc_day_window(metric_day)
 
     users_count = await _count_by_day(conn, "users", window_start, window_end)
@@ -127,7 +162,7 @@ async def _collect_metrics(conn, metric_day: date) -> DailyProjectMetrics:
     )
     raw_tryon = {str(status): int(cnt) for status, cnt in tryon_rows.fetchall()}
     tryon_successful_count = raw_tryon.get("completed", 0)
-    tryon_interrupted_count = raw_tryon.get("failed", 0)
+    tryon_interrupted_count = sum(raw_tryon.get(status, 0) for status in interrupted_statuses)
     tryon_total_count = sum(raw_tryon.values())
 
     return DailyProjectMetrics(
@@ -211,6 +246,16 @@ async def _validate_metrics_row(conn, metric_day: date) -> dict[str, int | str]:
     row = result.mappings().first()
     if row is None:
         raise RuntimeError(f"Row for metric_date={metric_day.isoformat()} does not exist")
+
+    total = int(row["tryon_total_count"])
+    completed = int(row["tryon_successful_count"])
+    interrupted = int(row["tryon_interrupted_count"])
+    if total < completed + interrupted:
+        raise RuntimeError(
+            "Inconsistent metrics row: tryon_total_count is lower than "
+            "tryon_successful_count + tryon_interrupted_count"
+        )
+
     return {
         "metric_date": row["metric_date"].isoformat(),
         "users_registered_count": int(row["users_registered_count"]),
@@ -222,12 +267,17 @@ async def _validate_metrics_row(conn, metric_day: date) -> dict[str, int | str]:
     }
 
 
-async def run_aggregate(run_day: date, db_url: str) -> DailyProjectMetrics:
+async def run_aggregate(
+    run_day: date,
+    db_url: str,
+    interrupted_statuses: tuple[str, ...],
+) -> DailyProjectMetrics:
     engine = create_async_engine(_to_async_db_url(db_url), pool_pre_ping=True, future=True)
     try:
         async with engine.begin() as conn:
+            await _ensure_source_tables(conn, ("users", "feed_items", "likes", "tryon_sessions"))
             await _ensure_target_table(conn)
-            metrics = await _collect_metrics(conn, run_day)
+            metrics = await _collect_metrics(conn, run_day, interrupted_statuses=interrupted_statuses)
             await _upsert_metrics(conn, metrics)
             return metrics
     finally:
@@ -247,9 +297,16 @@ async def run_validate(run_day: date, db_url: str) -> dict[str, int | str]:
 def main() -> None:
     args = _parse_args()
     run_day = datetime.strptime(args.run_date, "%Y-%m-%d").date()
+    interrupted_statuses = _parse_statuses_csv(args.interrupted_statuses)
 
     if args.mode == "aggregate":
-        metrics = asyncio.run(run_aggregate(run_day, args.db_url))
+        metrics = asyncio.run(
+            run_aggregate(
+                run_day,
+                args.db_url,
+                interrupted_statuses=interrupted_statuses,
+            )
+        )
         print(
             json.dumps(
                 {
@@ -261,6 +318,7 @@ def main() -> None:
                     "tryon_total_count": metrics.tryon_total_count,
                     "tryon_successful_count": metrics.tryon_successful_count,
                     "tryon_interrupted_count": metrics.tryon_interrupted_count,
+                    "interrupted_statuses": list(interrupted_statuses),
                 },
                 ensure_ascii=False,
             )

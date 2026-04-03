@@ -8,6 +8,11 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
+      AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME:-Air}
+      AIRFLOW_ADMIN_LASTNAME: ${AIRFLOW_ADMIN_LASTNAME:-Flow}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
     volumes:
       - airflow_data:/opt/airflow
       - ./dags:/opt/airflow/dags
@@ -18,12 +23,12 @@ services:
       bash -c "
       airflow db migrate &&
       (airflow users create
-      --username admin
-      --password admin
-      --firstname Air
-      --lastname Flow
+      --username $$AIRFLOW_ADMIN_USERNAME
+      --password $$AIRFLOW_ADMIN_PASSWORD
+      --firstname $$AIRFLOW_ADMIN_FIRSTNAME
+      --lastname $$AIRFLOW_ADMIN_LASTNAME
       --role Admin
-      --email admin@example.com || true)
+      --email $$AIRFLOW_ADMIN_EMAIL || true)
       "
 
   airflow-webserver:
@@ -40,9 +45,18 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
-      SWIPEIT_BATCH_IMAGE: swipeit-batch:latest
-      SWIPEIT_DOCKER_NETWORK: diplom_default
-      BATCH_DB_URL: postgresql://postgres:swipeit-gon-make-it@postgres:5432/swipeit
+      SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
+      SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
+      BATCH_DB_URL: ${BATCH_DB_URL:?Set BATCH_DB_URL in your environment or .env file}
+      TRYON_INTERRUPTED_STATUSES: ${TRYON_INTERRUPTED_STATUSES:-failed}
+      SWIPEIT_DAG_SCHEDULE: ${SWIPEIT_DAG_SCHEDULE:-0 2 * * *}
+      SWIPEIT_DAG_CATCHUP: ${SWIPEIT_DAG_CATCHUP:-true}
+      SWIPEIT_DAG_RETRIES: ${SWIPEIT_DAG_RETRIES:-2}
+      SWIPEIT_DAG_RETRY_DELAY_MINUTES: ${SWIPEIT_DAG_RETRY_DELAY_MINUTES:-5}
+      SWIPEIT_TASK_TIMEOUT_MINUTES: ${SWIPEIT_TASK_TIMEOUT_MINUTES:-30}
+      SWIPEIT_DAGRUN_TIMEOUT_MINUTES: ${SWIPEIT_DAGRUN_TIMEOUT_MINUTES:-60}
+      SWIPEIT_MAX_ACTIVE_RUNS: ${SWIPEIT_MAX_ACTIVE_RUNS:-1}
+      SWIPEIT_MAX_ACTIVE_TASKS: ${SWIPEIT_MAX_ACTIVE_TASKS:-2}
     volumes:
       - airflow_data:/opt/airflow
       - ./dags:/opt/airflow/dags
@@ -62,9 +76,18 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
-      SWIPEIT_BATCH_IMAGE: swipeit-batch:latest
-      SWIPEIT_DOCKER_NETWORK: diplom_default
-      BATCH_DB_URL: postgresql://postgres:swipeit-gon-make-it@postgres:5432/swipeit
+      SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
+      SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
+      BATCH_DB_URL: ${BATCH_DB_URL:?Set BATCH_DB_URL in your environment or .env file}
+      TRYON_INTERRUPTED_STATUSES: ${TRYON_INTERRUPTED_STATUSES:-failed}
+      SWIPEIT_DAG_SCHEDULE: ${SWIPEIT_DAG_SCHEDULE:-0 2 * * *}
+      SWIPEIT_DAG_CATCHUP: ${SWIPEIT_DAG_CATCHUP:-true}
+      SWIPEIT_DAG_RETRIES: ${SWIPEIT_DAG_RETRIES:-2}
+      SWIPEIT_DAG_RETRY_DELAY_MINUTES: ${SWIPEIT_DAG_RETRY_DELAY_MINUTES:-5}
+      SWIPEIT_TASK_TIMEOUT_MINUTES: ${SWIPEIT_TASK_TIMEOUT_MINUTES:-30}
+      SWIPEIT_DAGRUN_TIMEOUT_MINUTES: ${SWIPEIT_DAGRUN_TIMEOUT_MINUTES:-60}
+      SWIPEIT_MAX_ACTIVE_RUNS: ${SWIPEIT_MAX_ACTIVE_RUNS:-1}
+      SWIPEIT_MAX_ACTIVE_TASKS: ${SWIPEIT_MAX_ACTIVE_TASKS:-2}
     volumes:
       - airflow_data:/opt/airflow
       - ./dags:/opt/airflow/dags
