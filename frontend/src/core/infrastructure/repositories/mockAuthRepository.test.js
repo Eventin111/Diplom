@@ -23,7 +23,7 @@ describe('mockAuthRepository', () => {
 
   it('logs in demo account', () => {
     const repository = createMockAuthRepository({ storage: createMemoryStorage() });
-    const session = repository.login({ email: 'test@mail.ru', password: '123456' });
+    const session = repository.login({ email: 'test@mail.ru', password: '123123' });
 
     expect(session.token).toBe('mock-jwt-token');
     expect(session.user.email).toBe('test@mail.ru');
@@ -125,7 +125,7 @@ describe('mockAuthRepository', () => {
 
   it('clears session on logout', () => {
     const repository = createMockAuthRepository({ storage: createMemoryStorage() });
-    repository.login({ email: 'test@mail.ru', password: '123456' });
+    repository.login({ email: 'test@mail.ru', password: '123123' });
     repository.logout();
 
     const session = repository.initializeSession();
