@@ -1,8 +1,15 @@
-import { appConfig } from '../../config/appConfig';
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+import { apiFetch } from './http';
 
 export const toggleLike = async ({ postId, isLiked }) => {
-  await sleep(appConfig.mockDelayMs);
-  return { postId, isLiked: !isLiked };
+  if (isLiked) {
+    await apiFetch(`/api/v1/feed/${postId}/like`, {
+      method: 'DELETE'
+    });
+    return { postId, isLiked: false };
+  }
+
+  await apiFetch(`/api/v1/feed/${postId}/like`, {
+    method: 'POST'
+  });
+  return { postId, isLiked: true };
 };
