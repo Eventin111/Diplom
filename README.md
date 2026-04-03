@@ -205,3 +205,17 @@ Diplom/
 ## 📝 Лицензия
 
 MIT
+
+## 📊 Batch сервис (Airflow)
+
+Для ежедневной аналитики платформы добавлен DAG:
+
+- `batch/airflow/dags/swipeit_daily_metrics_dag.py`
+- используются шаги `DockerOperator`: `build_daily_metrics` и `validate_daily_metrics`
+- считает суточные метрики по `users`, `feed_items`, `likes`, `tryon_sessions`
+- результат пишет в `daily_project_metrics` через идемпотентный `UPSERT` по `metric_date`
+- поддерживает `catchup/backfill`
+
+Подробная инструкция запуска и backfill:
+
+- `batch/airflow/README.md`
