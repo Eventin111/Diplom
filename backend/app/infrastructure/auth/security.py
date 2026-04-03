@@ -11,6 +11,7 @@ from app.infrastructure.persistence.repositories.user_repo import UserRepository
 
 
 oauth = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1}/auth/login")
+oauth_optional = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1}/auth/login", auto_error=False)
 
 
 def create_token(sub: int, ttl_min: int) -> str:
@@ -51,3 +52,16 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_user_by_token(token=token, db=db)
+
+
+async def get_optional_current_user(
+    token: str | None = Depends(oauth_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    if not token:
+        return None
+
+    try:
+        return await get_user_by_token(token=token, db=db)
+    except HTTPException:
+        return None
