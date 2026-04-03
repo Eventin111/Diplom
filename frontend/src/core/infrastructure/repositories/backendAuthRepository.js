@@ -1,0 +1,165 @@
+import { appConfig } from '../../../config/appConfig';
+import { createUserEntity } from '../../domain/entities/userEntity';
+import { isGuestEmail } from '../../domain/services/authPolicy';
+import { createBrowserStorage } from '../storage/browserStorage';
+import { apiFetch } from '../../../services/api/http';
+
+const toFormBody = (payload) => new URLSearchParams(payload).toString();
+
+const extractErrorMessage = (error, fallback) => {
+  const message = String(error?.message || '').trim();
+  return message || fallback;
+};
+
+const sanitizeGuestUsername = () => `guest_user_${Math.floor(Date.now() / 1000)}`;
+
+export const createBackendAuthRepository = (deps = {}) => {
+  const storage = deps.storage || createBrowserStorage();
+  const config = deps.config || appConfig;
+  const keys = config.authStorageKeys;
+
+  const clearSession = () => {
+    storage.removeItem(keys.token);
+    storage.removeItem(keys.user);
+    storage.removeItem(keys.guestFlag);
+  };
+
+  const toUserEntity = (rawUser, emailHint = '') => {
+    const email = String(rawUser?.email || emailHint || '').trim().toLowerCase();
+    const isGuest = isGuestEmail(email);
+    return createUserEntity({
+      id: rawUser?.id,
+      email,
+      username: rawUser?.username || 'user',
+      avatar: rawUser?.avatar_url || rawUser?.avatar || undefined,
+      isGuest
+    });
+  };
+
+  const persistSession = (token, user) => {
+    storage.setItem(keys.token, token);
+    storage.setItem(keys.user, JSON.stringify(user));
+    storage.setItem(keys.guestFlag, String(Boolean(user?.isGuest)));
+  };
+
+  const fetchCurrentUser = async (token) =>
+    apiFetch('/api/v1/auth/me', {
+      method: 'GET',
+      withAuth: true,
+      token
+    });
+
+  const loginWithPassword = async ({ email, password }) => {
+    const payload = await apiFetch('/api/v1/auth/login', {
+      method: 'POST',
+      withAuth: false,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: toFormBody({
+        username: email,
+        password
+      })
+    });
+
+    return payload?.access_token;
+  };
+
+  const tryRegisterGuest = async ({ email, password }) => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const username = attempt === 0 ? 'guest_user' : sanitizeGuestUsername();
+      try {
+        await apiFetch('/api/v1/auth/register', {
+          method: 'POST',
+          withAuth: false,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            username
+          })
+        });
+        return;
+      } catch (error) {
+        const message = String(error?.message || '').toLowerCase();
+        if (message.includes('email') && message.includes('существ')) {
+          return;
+        }
+        if (message.includes('username') && message.includes('существ')) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  };
+
+  return {
+    async initializeSession() {
+      const token = storage.getItem(keys.token);
+      if (!token) {
+        clearSession();
+        return { token: null, user: null };
+      }
+
+      try {
+        const rawUser = await fetchCurrentUser(token);
+        const user = toUserEntity(rawUser);
+        persistSession(token, user);
+        return { token, user };
+      } catch (error) {
+        clearSession();
+        return { token: null, user: null };
+      }
+    },
+
+    async login({ email, password }) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      const loginPayload = { email: normalizedEmail, password };
+      let token;
+
+      try {
+        token = await loginWithPassword(loginPayload);
+      } catch (error) {
+        if (!isGuestEmail(normalizedEmail)) {
+          throw new Error(extractErrorMessage(error, 'Неверный email или пароль'));
+        }
+        await tryRegisterGuest(loginPayload);
+        token = await loginWithPassword(loginPayload);
+      }
+
+      const rawUser = await fetchCurrentUser(token);
+      const user = toUserEntity(rawUser, normalizedEmail);
+      persistSession(token, user);
+      return { token, user };
+    },
+
+    async register({ email, password, username }) {
+      const payload = {
+        email: String(email || '').trim().toLowerCase(),
+        password,
+        username: String(username || '').trim()
+      };
+
+      try {
+        await apiFetch('/api/v1/auth/register', {
+          method: 'POST',
+          withAuth: false,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      } catch (error) {
+        throw new Error(extractErrorMessage(error, 'Не удалось зарегистрироваться'));
+      }
+
+      return this.login({ email: payload.email, password: payload.password });
+    },
+
+    logout() {
+      clearSession();
+    }
+  };
+};
