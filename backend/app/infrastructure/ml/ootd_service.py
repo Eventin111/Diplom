@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PIL import Image
+from app.core.config import settings
 
 # Добавляем путь к ML коду
 # Путь: backend/app/infrastructure/ml/ootd_service.py -> корень проекта
@@ -36,9 +37,25 @@ class OOTDService:
         self._parsing = None
         self._diffusion = None
         self._runner = None
+
+    def _assert_cuda_ready(self) -> None:
+        if not settings.TRYON_REQUIRE_CUDA:
+            return
+        try:
+            import torch
+        except Exception as exc:
+            raise RuntimeError("PyTorch is unavailable in try-on worker runtime") from exc
+
+        cuda_available = bool(torch.cuda.is_available())
+        if not cuda_available:
+            raise RuntimeError(
+                "CUDA is unavailable in try-on worker. "
+                "Run tryon-worker with GPU access (NVIDIA runtime / gpus: all)."
+            )
     
     def _ensure_initialized(self):
         """Ленивая инициализация компонентов модели."""
+        self._assert_cuda_ready()
         if self._runner is None:
             self._openpose = OpenPoseAdapter(self.gpu_id)
             self._parsing = ParsingAdapter(self.gpu_id)
@@ -72,6 +89,9 @@ class OOTDService:
         Returns:
             Список сгенерированных изображений
         """
+        if model_type == "hd" and category != 0:
+            raise ValueError("model_type 'hd' requires category == 0")
+
         self._ensure_initialized()
         
         import tempfile
@@ -81,9 +101,6 @@ class OOTDService:
             
             model_image.save(model_path)
             cloth_image.save(cloth_path)
-            
-            if model_type == "hd" and category != 0:
-                raise ValueError("model_type 'hd' requires category == 0")
             
             request = InferenceRequest(
                 gpu_id=self.gpu_id,
@@ -116,6 +133,7 @@ class OOTDService:
             "gpu_id": self.gpu_id,
             "cuda_available": cuda_available,
             "gpu_name": gpu_name,
+            "tryon_require_cuda": bool(settings.TRYON_REQUIRE_CUDA),
         }
 
 

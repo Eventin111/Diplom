@@ -6,6 +6,7 @@
 
 import os
 import pdb
+from urllib.request import urlretrieve
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -49,8 +50,8 @@ class OpenposeDetector:
         # face_modelpath = os.path.join(annotator_ckpts_path, "facenet.pth")
 
         if not os.path.exists(body_modelpath):
-            from basicsr.utils.download_util import load_file_from_url
-            load_file_from_url(body_model_path, model_dir=annotator_ckpts_path)
+            os.makedirs(annotator_ckpts_path, exist_ok=True)
+            urlretrieve(body_model_path, body_modelpath)
 
         # if not os.path.exists(hand_modelpath):
         #     from basicsr.utils.download_util import load_file_from_url

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import gc
 import io
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from PIL import Image
@@ -29,6 +31,7 @@ from app.infrastructure.queue.tryon_queue import (
     dequeue_tryon_task,
     enqueue_tryon_dead_letter,
     enqueue_tryon_task,
+    set_tryon_worker_heartbeat,
     release_tryon_processing_lock,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
@@ -43,10 +46,98 @@ from app.application.dto.media_dto import MediaType
 logger = logging.getLogger(__name__)
 
 
+def _is_non_retriable_tryon_error(exc: Exception) -> bool:
+    error_message = str(exc).lower()
+    error_type = exc.__class__.__name__.lower()
+    known_non_retriable_markers = (
+        "cuda out of memory",
+        "outofmemoryerror",
+        "no_suchfile",
+        "file doesn't exist",
+        "no such file or directory",
+        "failed:load model from",
+    )
+    return error_type.endswith("outofmemoryerror") or any(
+        marker in error_message for marker in known_non_retriable_markers
+    )
+
+
 def _media_file_url(media_id: Optional[int]) -> Optional[str]:
     if media_id is None:
         return None
     return f"{settings.API_V1}/media/{media_id}/file"
+
+
+def _release_cuda_memory() -> None:
+    gc.collect()
+    try:
+        import torch
+    except Exception:
+        return
+    if not torch.cuda.is_available():
+        return
+    try:
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    except Exception as exc:
+        logger.debug("Failed to release CUDA cache: %s", exc)
+
+
+def _get_cuda_runtime_snapshot() -> dict[str, object]:
+    visible_devices = str(os.getenv("NVIDIA_VISIBLE_DEVICES", "")).strip().lower()
+    runtime_hint = str(os.getenv("TRYON_RUNTIME", "")).strip().lower()
+    cuda_hint = visible_devices not in {"", "none", "void"} or runtime_hint == "nvidia"
+    cuda_available = cuda_hint
+    gpu_name = None
+    gpu_memory_total_mb = None
+    gpu_memory_used_mb = None
+    cuda_probe = "env-hint"
+
+    try:
+        import torch  # type: ignore
+
+        cuda_available = bool(torch.cuda.is_available())
+        cuda_probe = "torch"
+        if cuda_available:
+            try:
+                gpu_name = torch.cuda.get_device_name(0)
+            except Exception:
+                gpu_name = None
+            try:
+                memory_stats = torch.cuda.mem_get_info(0)
+                if isinstance(memory_stats, tuple) and len(memory_stats) == 2:
+                    free_bytes, total_bytes = memory_stats
+                    gpu_memory_total_mb = round(float(total_bytes) / (1024 * 1024), 2)
+                    gpu_memory_used_mb = round(float(total_bytes - free_bytes) / (1024 * 1024), 2)
+            except Exception:
+                gpu_memory_total_mb = None
+                gpu_memory_used_mb = None
+    except Exception:
+        cuda_available = cuda_hint
+
+    return {
+        "cuda_available": cuda_available,
+        "gpu_name": gpu_name,
+        "gpu_memory_total_mb": gpu_memory_total_mb,
+        "gpu_memory_used_mb": gpu_memory_used_mb,
+        "cuda_probe": cuda_probe,
+        "nvidia_visible_devices": visible_devices or None,
+    }
+
+
+async def _publish_worker_heartbeat(state: str, *, session_id: int | None = None) -> None:
+    payload: dict[str, object] = {
+        "state": state,
+        "session_id": session_id,
+        "pid": os.getpid(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "tryon_require_cuda": bool(settings.TRYON_REQUIRE_CUDA),
+    }
+    payload.update(_get_cuda_runtime_snapshot())
+    try:
+        await set_tryon_worker_heartbeat(payload)
+    except Exception as exc:
+        logger.debug("Failed to publish try-on worker heartbeat: %s", exc)
 
 
 def _decode_data_url_image(data_url: str) -> bytes:
@@ -86,6 +177,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
         return
 
     try:
+        _release_cuda_memory()
         async with AsyncSessionLocal() as db:
             session = await tryon_repo.get(db, session_id)
             if session is None:
@@ -197,7 +289,8 @@ async def process_tryon_task(task: dict[str, object]) -> None:
             )
     except Exception as exc:
         logger.exception("Try-on worker failed for session %s (attempt %s)", session_id, attempt)
-        if attempt < settings.TRYON_QUEUE_MAX_RETRIES:
+        is_non_retriable = _is_non_retriable_tryon_error(exc)
+        if not is_non_retriable and attempt < settings.TRYON_QUEUE_MAX_RETRIES:
             retry_task = dict(task)
             retry_task["attempt"] = attempt + 1
             await enqueue_tryon_task(retry_task)
@@ -226,7 +319,11 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 event_type=TryOnEventType.DEAD_LETTERED,
                 attempt=attempt,
                 error_text=str(exc),
-                details="Moved try-on task to dead-letter queue",
+                details=(
+                    "Moved try-on task to dead-letter queue (non-retriable error)"
+                    if is_non_retriable
+                    else "Moved try-on task to dead-letter queue"
+                ),
             )
             await tryon_repo.update_status(
                 db,
@@ -244,16 +341,22 @@ async def process_tryon_task(task: dict[str, object]) -> None:
             )
     finally:
         await release_tryon_processing_lock(session_id)
+        _release_cuda_memory()
 
 
 async def run_tryon_worker() -> None:
     await ensure_schema_compatibility(engine)
     logger.info("Try-on worker started. Queue: %s", settings.TRYON_QUEUE_NAME)
     while True:
+        await _publish_worker_heartbeat("idle")
         await maybe_run_periodic_tryon_recovery()
         await maybe_run_periodic_tryon_cleanup()
         task = await dequeue_tryon_task()
         if task is None:
             continue
+        raw_session_id = task.get("session_id")
+        session_id = int(raw_session_id) if raw_session_id is not None else None
+        await _publish_worker_heartbeat("processing", session_id=session_id)
         await process_tryon_task(task)
+        await _publish_worker_heartbeat("idle")
         await asyncio.sleep(0)

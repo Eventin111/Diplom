@@ -78,6 +78,22 @@ async def get_tryon_queue_health() -> dict[str, Any]:
     }
 
 
+async def set_tryon_worker_heartbeat(payload: dict[str, Any]) -> None:
+    await get_redis_client().set(
+        settings.TRYON_WORKER_HEARTBEAT_KEY,
+        json.dumps(payload, separators=(",", ":")),
+        ex=settings.TRYON_WORKER_HEARTBEAT_TTL_SECONDS,
+    )
+
+
+async def get_tryon_worker_heartbeat() -> Optional[dict[str, Any]]:
+    raw_payload = await get_redis_client().get(settings.TRYON_WORKER_HEARTBEAT_KEY)
+    if raw_payload is None:
+        return None
+    payload = json.loads(raw_payload)
+    return payload if isinstance(payload, dict) else None
+
+
 def build_tryon_processing_lock_key(session_id: int) -> str:
     return f"tryon:processing:{session_id}"
 

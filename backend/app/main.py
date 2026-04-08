@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,6 +14,7 @@ from app.infrastructure.persistence import models  # noqa: F401
 from app.infrastructure.persistence.models.feed import FeedItem
 from app.infrastructure.persistence.models.user import User
 from app.infrastructure.queue.redis_client import close_redis_client
+from app.infrastructure.storage.s3 import s3_client
 from app.presentation.api.routes import api_router
 
 
@@ -25,6 +26,9 @@ DEMO_FEED_CAPTIONS = [
     "Верхняя одежда на осень: пальто и куртки #пальто #классика #осень",
     "Бохо-образы и легкие ткани для теплого сезона #бохо #свободныйстиль #творчество",
 ]
+DEMO_FEED_EMAIL = "demo-feed@swipelt.com"
+DEMO_FEED_USERNAME = "demo_feed"
+LEGACY_DEMO_FEED_EMAILS = ("demo-feed@swipelt.local",)
 
 
 async def ensure_demo_user_exists() -> None:
@@ -46,16 +50,35 @@ async def ensure_demo_user_exists() -> None:
 
 async def seed_demo_feed() -> None:
     async with AsyncSession(engine) as session:
-        result = await session.execute(select(User).where(User.email == "demo-feed@swipelt.local"))
+        result = await session.execute(
+            select(User).where(
+                or_(
+                    User.email == DEMO_FEED_EMAIL,
+                    User.username == DEMO_FEED_USERNAME,
+                )
+            ).order_by(User.id.asc()).limit(1)
+        )
         demo_user = result.scalar_one_or_none()
 
         if demo_user is None:
+            legacy_result = await session.execute(
+                select(User).where(User.email.in_(LEGACY_DEMO_FEED_EMAILS))
+            )
+            demo_user = legacy_result.scalar_one_or_none()
+            if demo_user is not None:
+                demo_user.email = DEMO_FEED_EMAIL
+                await session.flush()
+
+        if demo_user is None:
             demo_user = User(
-                email="demo-feed@swipelt.local",
-                username="demo_feed",
+                email=DEMO_FEED_EMAIL,
+                username=DEMO_FEED_USERNAME,
                 hashed_password=hash_password("DemoFeed123"),
             )
             session.add(demo_user)
+            await session.flush()
+        elif demo_user.email != DEMO_FEED_EMAIL:
+            demo_user.email = DEMO_FEED_EMAIL
             await session.flush()
 
         existing_ids = set(
@@ -85,6 +108,8 @@ async def lifespan(_: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await ensure_schema_compatibility(engine)
+    # Warm up S3 client and ensure bucket exists on startup.
+    _ = s3_client.client
     await ensure_demo_user_exists()
     await seed_demo_feed()
     try:

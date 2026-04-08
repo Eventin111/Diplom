@@ -49,6 +49,11 @@ def serialize_media(media) -> MediaResponse:
 
     return MediaResponse(**media_dict)
 
+
+def is_tryon_media_asset(storage_key: str | None) -> bool:
+    key = str(storage_key or "").lower()
+    return "/tryon/" in key or "\\tryon\\" in key
+
 @router.post("/upload", response_model=MediaUploadResponse)
 async def upload_media(
     file: UploadFile = File(...),
@@ -112,13 +117,15 @@ async def list_my_media(
     current_user: UserResponse = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Вернуть список медиа текущего пользователя, исключая текущий аватар."""
+    """Вернуть профильные медиа текущего пользователя, исключая аватар и try-on артефакты."""
     media_repo = MediaRepository()
     user_media = await media_repo.get_by_owner(db, current_user.id)
     avatar_url = str(current_user.avatar_url or "")
 
     items: list[MediaResponse] = []
     for media in user_media:
+        if is_tryon_media_asset(media.storage_key):
+            continue
         media_response = serialize_media(media)
         media_public_url = str(media_response.public_url or "")
         if avatar_url and media_public_url and (
