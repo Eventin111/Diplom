@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { appConfig } from '../../config/appConfig';
 import { getTryOnSession } from '../../core/application/usecases/getTryOnSession';
 import { startTryOnSession } from '../../core/application/usecases/startTryOnSession';
 import { subscribeToTryOnSession } from '../../core/application/usecases/subscribeToTryOnSession';
@@ -8,6 +9,8 @@ import { createApiTryOnRepository } from '../../core/infrastructure/repositories
 import './TryOnPage.css';
 
 const INFERENCE_STEPS = ['Подбираем стиль', 'Уточняем посадку', 'Собираем образ', 'Финальный штрих'];
+const SESSION_STATUS_POLL_INTERVAL_MS = 5000;
+const MAX_PROCESSING_SECONDS = Math.max(120, appConfig.tryOnMaxProcessingSeconds);
 const tryOnRepository = createApiTryOnRepository();
 const mediaRepository = createApiMediaRepository();
 
@@ -23,6 +26,11 @@ const normalizeProfilePhoto = (media) => ({
   name: `Фото ${media.id}`,
   date: media.created_at ? new Date(media.created_at).toLocaleDateString() : new Date().toLocaleDateString()
 });
+
+const isTryOnMediaAsset = (media) => {
+  const key = String(media?.storage_key || '').toLowerCase();
+  return key.includes('/tryon/') || key.includes('\\tryon\\');
+};
 
 const readPrimaryProfilePhoto = () => {
   try {
@@ -59,6 +67,7 @@ const TryOnPage = () => {
   const requestInFlightRef = useRef(false);
   const websocketRef = useRef(null);
   const terminalStatusSeenRef = useRef(false);
+  const timeoutHandledRef = useRef(false);
 
   const presetClothPhoto = location.state?.clothPhoto || location.state?.photo || '';
   const [profileInfo, setProfileInfo] = useState(readPrimaryProfilePhoto);
@@ -118,6 +127,7 @@ const TryOnPage = () => {
 
     if (nextStatus === 'completed') {
       terminalStatusSeenRef.current = true;
+      timeoutHandledRef.current = false;
       setProgress(100);
       setActiveStepIndex(INFERENCE_STEPS.length - 1);
       setResultImage(payload?.result_image_url || '');
@@ -128,6 +138,7 @@ const TryOnPage = () => {
 
     if (nextStatus === 'failed') {
       terminalStatusSeenRef.current = true;
+      timeoutHandledRef.current = false;
       setError(payload?.error_text || 'Примерка завершилась с ошибкой.');
       setIsProcessing(false);
       closeTryOnSocket();
@@ -194,7 +205,9 @@ const TryOnPage = () => {
           return;
         }
 
-        const photos = mediaItems.map(normalizeProfilePhoto);
+        const photos = mediaItems
+          .filter((item) => !isTryOnMediaAsset(item))
+          .map(normalizeProfilePhoto);
         const savedIndex = Number(localStorage.getItem('primaryPhotoIndex') || 0);
         const safeIndex =
           Number.isInteger(savedIndex) && savedIndex >= 0 && savedIndex < photos.length ? savedIndex : 0;
@@ -223,6 +236,7 @@ const TryOnPage = () => {
     setSessionId(null);
     setServerStatus('');
     terminalStatusSeenRef.current = false;
+    timeoutHandledRef.current = false;
     closeTryOnSocket();
     autoStartTriggeredRef.current = false;
   }, [presetClothPhoto]);
@@ -275,6 +289,7 @@ const TryOnPage = () => {
     setSessionId(null);
     setServerStatus('');
     terminalStatusSeenRef.current = false;
+    timeoutHandledRef.current = false;
     closeTryOnSocket();
 
     try {
@@ -284,7 +299,7 @@ const TryOnPage = () => {
         modelType: 'hd',
         category: 0,
         scale: 2.0,
-        numSteps: 3,
+        numSteps: 1,
         numSamples: 1,
         seed: -1
       });
@@ -394,7 +409,17 @@ const TryOnPage = () => {
     }, 850);
 
     const elapsedTimer = window.setInterval(() => {
-      setElapsedSeconds((sec) => sec + 1);
+      setElapsedSeconds((sec) => {
+        const next = sec + 1;
+        if (next >= MAX_PROCESSING_SECONDS && !terminalStatusSeenRef.current && !timeoutHandledRef.current) {
+          timeoutHandledRef.current = true;
+          terminalStatusSeenRef.current = true;
+          closeTryOnSocket();
+          setIsProcessing(false);
+          setError('Примерка заняла слишком много времени. Попробуйте еще раз.');
+        }
+        return next;
+      });
     }, 1000);
 
     return () => {
@@ -402,6 +427,24 @@ const TryOnPage = () => {
       window.clearInterval(elapsedTimer);
     };
   }, [isProcessing]);
+
+  useEffect(() => {
+    if (!isProcessing || !sessionId) {
+      return;
+    }
+
+    const pollingTimer = window.setInterval(() => {
+      if (terminalStatusSeenRef.current) {
+        return;
+      }
+
+      void syncTryOnSession(sessionId).catch(() => {});
+    }, SESSION_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(pollingTimer);
+    };
+  }, [isProcessing, sessionId]);
 
   return (
     <div className="tryon-page">
