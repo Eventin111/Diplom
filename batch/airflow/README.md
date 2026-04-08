@@ -48,7 +48,12 @@ cp batch/airflow/.env.example batch/airflow/.env
 ```
 
 ```env
-BATCH_DB_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/swipeit
+# Предпочтительно: секрет БД через Airflow connection (secret backend)
+AIRFLOW_CONN_SWIPEIT_BATCH_DB=postgresql://postgres:YOUR_PASSWORD@postgres:5432/swipeit
+SWIPEIT_BATCH_DB_CONN_ID=swipeit_batch_db
+
+# Backward compatible fallback (если не используешь AIRFLOW_CONN_...)
+BATCH_DB_URL=
 SWIPEIT_BATCH_IMAGE=swipeit-batch:latest
 SWIPEIT_DOCKER_NETWORK=diplom_default
 
@@ -65,7 +70,7 @@ SWIPEIT_MAX_ACTIVE_TASKS=2
 
 # Airflow UI админ:
 AIRFLOW_ADMIN_USERNAME=admin
-AIRFLOW_ADMIN_PASSWORD=admin
+AIRFLOW_ADMIN_PASSWORD=CHANGE_ME_AIRFLOW_ADMIN_PASSWORD
 AIRFLOW_ADMIN_FIRSTNAME=Air
 AIRFLOW_ADMIN_LASTNAME=Flow
 AIRFLOW_ADMIN_EMAIL=admin@example.com
@@ -86,8 +91,8 @@ docker compose -f batch/airflow/docker-compose.airflow.yml up -d
 4. Открой UI:
 
 - URL: `http://localhost:8080`
-- логин: `admin`
-- пароль: `admin`
+- логин: из `AIRFLOW_ADMIN_USERNAME`
+- пароль: из `AIRFLOW_ADMIN_PASSWORD`
 
 5. Включи DAG `swipeit_daily_metrics`.
 

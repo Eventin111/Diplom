@@ -87,6 +87,10 @@ MINIO_ROOT_USER=CHANGE_ME_MINIO_USER
 MINIO_ROOT_PASSWORD=CHANGE_ME_MINIO_PASSWORD
 ```
 
+Единая схема хранения и прокидывания секретов (local + GitHub + Airflow):
+
+- `docs/secret-store.md`
+
 ### 4. Запуск БД, MinIO и Redis
 
 ```bash

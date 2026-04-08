@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pendulum
 from airflow import DAG
+from airflow.hooks.base import BaseHook
 from airflow.providers.docker.operators.docker import DockerOperator
 
 
@@ -24,7 +25,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 DEFAULT_BATCH_IMAGE = os.getenv("SWIPEIT_BATCH_IMAGE", "swipeit-batch:latest")
 DEFAULT_DOCKER_NETWORK = os.getenv("SWIPEIT_DOCKER_NETWORK", "diplom_default")
-DEFAULT_BATCH_DB_URL = os.getenv("BATCH_DB_URL")
+DEFAULT_BATCH_DB_CONN_ID = os.getenv("SWIPEIT_BATCH_DB_CONN_ID", "swipeit_batch_db")
 DEFAULT_INTERRUPTED_STATUSES = os.getenv("TRYON_INTERRUPTED_STATUSES", "failed")
 DEFAULT_SCHEDULE = os.getenv("SWIPEIT_DAG_SCHEDULE", "0 2 * * *")
 DEFAULT_TASK_TIMEOUT_MINUTES = _env_int("SWIPEIT_TASK_TIMEOUT_MINUTES", 30)
@@ -35,11 +36,31 @@ DEFAULT_MAX_ACTIVE_RUNS = _env_int("SWIPEIT_MAX_ACTIVE_RUNS", 1)
 DEFAULT_MAX_ACTIVE_TASKS = _env_int("SWIPEIT_MAX_ACTIVE_TASKS", 2)
 DEFAULT_CATCHUP = _env_bool("SWIPEIT_DAG_CATCHUP", True)
 
-if not DEFAULT_BATCH_DB_URL:
-    raise RuntimeError(
-        "BATCH_DB_URL environment variable is required for swipeit_daily_metrics DAG "
-        "(do not hardcode DB credentials in code)."
-    )
+
+def _resolve_batch_db_url() -> str:
+    direct_url = os.getenv("BATCH_DB_URL")
+    if direct_url:
+        return direct_url
+
+    try:
+        conn = BaseHook.get_connection(DEFAULT_BATCH_DB_CONN_ID)
+    except Exception as exc:
+        raise RuntimeError(
+            "Batch DB secret is missing. Set BATCH_DB_URL or AIRFLOW_CONN_"
+            f"{DEFAULT_BATCH_DB_CONN_ID.upper()}."
+        ) from exc
+
+    conn_uri = conn.get_uri()
+    if not conn_uri:
+        raise RuntimeError(
+            f"Airflow connection '{DEFAULT_BATCH_DB_CONN_ID}' is empty. "
+            "Set BATCH_DB_URL or AIRFLOW_CONN value."
+        )
+
+    return conn_uri
+
+
+DEFAULT_BATCH_DB_URL = _resolve_batch_db_url()
 
 
 with DAG(

@@ -9,7 +9,7 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
       AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
-      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?Set AIRFLOW_ADMIN_PASSWORD in your environment or .env file}
       AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME:-Air}
       AIRFLOW_ADMIN_LASTNAME: ${AIRFLOW_ADMIN_LASTNAME:-Flow}
       AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
@@ -45,9 +45,12 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
+      AIRFLOW__SECRETS__BACKEND: airflow.secrets.environment_variables.EnvironmentVariablesBackend
       SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
       SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
-      BATCH_DB_URL: ${BATCH_DB_URL:?Set BATCH_DB_URL in your environment or .env file}
+      SWIPEIT_BATCH_DB_CONN_ID: ${SWIPEIT_BATCH_DB_CONN_ID:-swipeit_batch_db}
+      BATCH_DB_URL: ${BATCH_DB_URL:-}
+      AIRFLOW_CONN_SWIPEIT_BATCH_DB: ${AIRFLOW_CONN_SWIPEIT_BATCH_DB:-}
       TRYON_INTERRUPTED_STATUSES: ${TRYON_INTERRUPTED_STATUSES:-failed}
       SWIPEIT_DAG_SCHEDULE: ${SWIPEIT_DAG_SCHEDULE:-0 2 * * *}
       SWIPEIT_DAG_CATCHUP: ${SWIPEIT_DAG_CATCHUP:-true}
@@ -76,9 +79,12 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker==3.11.0
+      AIRFLOW__SECRETS__BACKEND: airflow.secrets.environment_variables.EnvironmentVariablesBackend
       SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
       SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
-      BATCH_DB_URL: ${BATCH_DB_URL:?Set BATCH_DB_URL in your environment or .env file}
+      SWIPEIT_BATCH_DB_CONN_ID: ${SWIPEIT_BATCH_DB_CONN_ID:-swipeit_batch_db}
+      BATCH_DB_URL: ${BATCH_DB_URL:-}
+      AIRFLOW_CONN_SWIPEIT_BATCH_DB: ${AIRFLOW_CONN_SWIPEIT_BATCH_DB:-}
       TRYON_INTERRUPTED_STATUSES: ${TRYON_INTERRUPTED_STATUSES:-failed}
       SWIPEIT_DAG_SCHEDULE: ${SWIPEIT_DAG_SCHEDULE:-0 2 * * *}
       SWIPEIT_DAG_CATCHUP: ${SWIPEIT_DAG_CATCHUP:-true}
