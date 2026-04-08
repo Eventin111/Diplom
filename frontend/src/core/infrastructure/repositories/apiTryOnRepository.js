@@ -5,6 +5,42 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const buildTryOnUrl = () => `${appConfig.apiBaseUrl}/api/v1/tryon/try-on`;
 const buildTryOnSessionStatusUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}`;
 const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
+const MODEL_MAX_UPLOAD_DIMENSION = 896;
+const CLOTH_MAX_UPLOAD_DIMENSION = 768;
+
+const normalizeMediaUrl = (value) => {
+  if (!value || typeof value !== 'string') {
+    return '';
+  }
+
+  try {
+    return new URL(value, appConfig.apiBaseUrl).toString();
+  } catch (error) {
+    return value;
+  }
+};
+
+const normalizeTryOnSessionPayload = (payload) => {
+  const nestedSession = payload?.session || {};
+  const status = payload?.status || nestedSession?.status || '';
+  const errorText = payload?.error_text || nestedSession?.error_text || '';
+  const resultMediaId = payload?.result_media_id ?? nestedSession?.result_media_id ?? null;
+  const resolvedResultUrl = normalizeMediaUrl(
+    payload?.result_image_url ||
+      payload?.resultUrl ||
+      payload?.results?.[0] ||
+      nestedSession?.result_image_url ||
+      (resultMediaId ? `/api/v1/media/${resultMediaId}/file` : '')
+  );
+
+  return {
+    ...payload,
+    status,
+    error_text: errorText,
+    result_media_id: resultMediaId,
+    result_image_url: resolvedResultUrl
+  };
+};
 
 const buildTryOnWebSocketUrl = (sessionId) => {
   const token = getAuthToken();
@@ -16,9 +52,10 @@ const buildTryOnWebSocketUrl = (sessionId) => {
   return url.toString();
 };
 
-const blobToJpegFile = async (blob, fallbackName) => {
+const blobToJpegFile = async (blob, fallbackName, options = {}) => {
+  const { maxDimension = null, quality = 0.9 } = options;
   const contentType = String(blob?.type || '').toLowerCase();
-  if (contentType === 'image/jpeg' || contentType === 'image/jpg') {
+  if ((contentType === 'image/jpeg' || contentType === 'image/jpg') && !maxDimension) {
     return new File([blob], fallbackName, { type: 'image/jpeg' });
   }
 
@@ -36,18 +73,26 @@ const blobToJpegFile = async (blob, fallbackName) => {
       el.src = objectUrl;
     });
 
+    const sourceWidth = img.naturalWidth || img.width;
+    const sourceHeight = img.naturalHeight || img.height;
+    const longestSide = Math.max(sourceWidth, sourceHeight);
+    const scale =
+      maxDimension && Number.isFinite(maxDimension) && maxDimension > 0 && longestSide > maxDimension
+        ? maxDimension / longestSide
+        : 1;
+
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       throw new Error('Canvas context is not available');
     }
 
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     const jpegBlob = await new Promise((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.92);
+      canvas.toBlob(resolve, 'image/jpeg', quality);
     });
 
     if (!jpegBlob) {
@@ -61,19 +106,19 @@ const blobToJpegFile = async (blob, fallbackName) => {
 };
 
 const imageInputToFile = async (input, fallbackName, options = {}) => {
-  const { preferJpeg = false } = options;
+  const { preferJpeg = false, maxDimension = null, quality = 0.9 } = options;
 
   if (!input) {
     throw new Error('Image input is required');
   }
 
   if (input instanceof File) {
-    return preferJpeg ? blobToJpegFile(input, fallbackName) : input;
+    return preferJpeg ? blobToJpegFile(input, fallbackName, { maxDimension, quality }) : input;
   }
 
   if (input instanceof Blob) {
     if (preferJpeg) {
-      return blobToJpegFile(input, fallbackName);
+      return blobToJpegFile(input, fallbackName, { maxDimension, quality });
     }
     return new File([input], fallbackName, { type: input.type || 'image/jpeg' });
   }
@@ -86,7 +131,7 @@ const imageInputToFile = async (input, fallbackName, options = {}) => {
 
     const blob = await response.blob();
     if (preferJpeg) {
-      return blobToJpegFile(blob, fallbackName);
+      return blobToJpegFile(blob, fallbackName, { maxDimension, quality });
     }
     return new File([blob], fallbackName, { type: blob.type || 'image/jpeg' });
   }
@@ -117,8 +162,16 @@ export const createApiTryOnRepository = () => ({
     numSamples = 1,
     seed = -1
   }) {
-    const modelImageFile = await imageInputToFile(modelImage, 'model-image.jpg');
-    const clothImageFile = await imageInputToFile(clothImage, 'cloth-image.jpg', { preferJpeg: true });
+    const modelImageFile = await imageInputToFile(modelImage, 'model-image.jpg', {
+      preferJpeg: true,
+      maxDimension: MODEL_MAX_UPLOAD_DIMENSION,
+      quality: 0.88
+    });
+    const clothImageFile = await imageInputToFile(clothImage, 'cloth-image.jpg', {
+      preferJpeg: true,
+      maxDimension: CLOTH_MAX_UPLOAD_DIMENSION,
+      quality: 0.9
+    });
 
     const formData = new FormData();
     formData.append('model_image', modelImageFile);
@@ -155,13 +208,14 @@ export const createApiTryOnRepository = () => ({
       }
 
       const payload = await response.json();
+      const normalizedPayload = normalizeTryOnSessionPayload(payload);
       return {
         id: Date.now(),
-        sessionId: payload?.session_id || null,
-        queued: Boolean(payload?.queued),
-        resultUrl: payload?.results?.[0] || payload?.result_image_url || '',
-        status: payload?.status || (payload?.success ? 'completed' : 'failed'),
-        raw: payload
+        sessionId: normalizedPayload?.session_id || null,
+        queued: Boolean(normalizedPayload?.queued),
+        resultUrl: normalizedPayload?.result_image_url || '',
+        status: normalizedPayload?.status || (normalizedPayload?.success ? 'completed' : 'failed'),
+        raw: normalizedPayload
       };
     } catch (error) {
       if (appConfig.useMockData) {
@@ -200,7 +254,8 @@ export const createApiTryOnRepository = () => ({
       throw new Error(`Try-on session request failed: ${response.status} ${detail}`);
     }
 
-    return response.json();
+    const payload = await response.json();
+    return normalizeTryOnSessionPayload(payload);
   },
 
   subscribeToTryOnSession(
@@ -216,7 +271,7 @@ export const createApiTryOnRepository = () => ({
     socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        onMessage?.(payload);
+        onMessage?.(normalizeTryOnSessionPayload(payload));
       } catch (error) {
         onError?.(error);
       }
