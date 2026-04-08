@@ -1,9 +1,9 @@
 import { loginUser } from '../../core/application/usecases/loginUser';
 import { logoutUser } from '../../core/application/usecases/logoutUser';
 import { registerUser } from '../../core/application/usecases/registerUser';
-import { createApiAuthRepository } from '../../core/infrastructure/repositories/apiAuthRepository';
+import { createBackendAuthRepository } from '../../core/infrastructure/repositories/backendAuthRepository';
 
-const authRepository = createApiAuthRepository();
+const authRepository = createBackendAuthRepository();
 
 export const loginRequest = async (payload) => loginUser(authRepository, payload);
 export const registerRequest = async (payload) => registerUser(authRepository, payload);

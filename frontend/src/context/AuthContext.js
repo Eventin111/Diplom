@@ -4,10 +4,10 @@ import { initializeAuthSession } from '../core/application/usecases/initializeAu
 import { loginUser } from '../core/application/usecases/loginUser';
 import { logoutUser } from '../core/application/usecases/logoutUser';
 import { registerUser } from '../core/application/usecases/registerUser';
-import { createApiAuthRepository } from '../core/infrastructure/repositories/apiAuthRepository';
+import { createBackendAuthRepository } from '../core/infrastructure/repositories/backendAuthRepository';
 
 const AuthContext = createContext();
-const authRepository = createApiAuthRepository();
+const authRepository = createBackendAuthRepository();
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
