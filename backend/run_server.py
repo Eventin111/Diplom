@@ -1,33 +1,34 @@
-"""
-Скрипт запуска сервера с поддержкой ML.
-"""
+"""Backend server entrypoint."""
 
-import os
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
-# Добавляем КОРЕНЬ проекта в PYTHONPATH (где лежит ml/)
-project_root = Path(__file__).parent.parent  # D:\Projects\SwipeIt
-sys.path.insert(0, str(project_root))
-
-# Добавляем ml/ для импорта OOTDiffusion
-ml_path = project_root / "ml"
-sys.path.insert(0, str(ml_path))
-
-# Добавляем корень backend
-backend_root = Path(__file__).parent
-sys.path.insert(0, str(backend_root))
-
-print(f"PYTHONPATH: {sys.path[:3]}...")
-
-# Теперь запускаем uvicorn
 import uvicorn
-from app.main import app
 
-if __name__ == "__main__":
+
+def _bootstrap_paths() -> None:
+    project_root = Path(__file__).parent.parent
+    backend_root = Path(__file__).parent
+    ml_path = project_root / "ml"
+
+    for path in (project_root, ml_path, backend_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
+def main() -> None:
+    _bootstrap_paths()
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
     )
+
+
+if __name__ == "__main__":
+    main()

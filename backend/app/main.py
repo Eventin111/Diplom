@@ -10,13 +10,12 @@ from app.core.errors import setup_exception_handlers
 from app.core.hashing import hash_password
 from app.infrastructure.db.db import Base, engine
 from app.infrastructure.db.schema_compat import ensure_schema_compatibility
-from app.infrastructure.persistence import models  # noqa: F401
+from app.infrastructure.persistence.models import feed, garment, likes, media, tryon, tryon_event, user
 from app.infrastructure.persistence.models.feed import FeedItem
 from app.infrastructure.persistence.models.user import User
 from app.infrastructure.queue.redis_client import close_redis_client
 from app.infrastructure.storage.s3 import s3_client
 from app.presentation.api.routes import api_router
-
 
 DEMO_FEED_CAPTIONS = [
     "Классический костюм и рубашка для офиса #офисныйстиль #деловойкостюм",
@@ -29,6 +28,7 @@ DEMO_FEED_CAPTIONS = [
 DEMO_FEED_EMAIL = "demo-feed@swipelt.com"
 DEMO_FEED_USERNAME = "demo_feed"
 LEGACY_DEMO_FEED_EMAILS = ("demo-feed@swipelt.local",)
+MODEL_MODULES = (feed, garment, likes, media, tryon, tryon_event, user)
 
 
 async def ensure_demo_user_exists() -> None:
@@ -51,19 +51,20 @@ async def ensure_demo_user_exists() -> None:
 async def seed_demo_feed() -> None:
     async with AsyncSession(engine) as session:
         result = await session.execute(
-            select(User).where(
+            select(User)
+            .where(
                 or_(
                     User.email == DEMO_FEED_EMAIL,
                     User.username == DEMO_FEED_USERNAME,
                 )
-            ).order_by(User.id.asc()).limit(1)
+            )
+            .order_by(User.id.asc())
+            .limit(1)
         )
         demo_user = result.scalar_one_or_none()
 
         if demo_user is None:
-            legacy_result = await session.execute(
-                select(User).where(User.email.in_(LEGACY_DEMO_FEED_EMAILS))
-            )
+            legacy_result = await session.execute(select(User).where(User.email.in_(LEGACY_DEMO_FEED_EMAILS)))
             demo_user = legacy_result.scalar_one_or_none()
             if demo_user is not None:
                 demo_user.email = DEMO_FEED_EMAIL
@@ -83,9 +84,7 @@ async def seed_demo_feed() -> None:
 
         existing_ids = set(
             (
-                await session.execute(
-                    select(FeedItem.id).where(FeedItem.id.in_(range(1, len(DEMO_FEED_CAPTIONS) + 1)))
-                )
+                await session.execute(select(FeedItem.id).where(FeedItem.id.in_(range(1, len(DEMO_FEED_CAPTIONS) + 1))))
             ).scalars()
         )
 

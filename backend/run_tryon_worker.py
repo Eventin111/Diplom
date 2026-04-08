@@ -3,11 +3,11 @@
 """
 
 import asyncio
+import importlib
 import logging
 import os
 import sys
 from pathlib import Path
-
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -75,25 +75,28 @@ def configure_cpu_limits() -> None:
     os.environ.setdefault("TORCH_NUM_INTEROP_THREADS", "1")
 
     try:
-        import torch
-
-        torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "2")))
-        torch.set_num_interop_threads(int(os.getenv("TORCH_NUM_INTEROP_THREADS", "1")))
+        torch_module = importlib.import_module("torch")
+        torch_module.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "2")))
+        torch_module.set_num_interop_threads(int(os.getenv("TORCH_NUM_INTEROP_THREADS", "1")))
     except Exception:
         pass
 
     try:
-        import cv2
-
-        cv2.setNumThreads(1)
+        cv2_module = importlib.import_module("cv2")
+        set_num_threads = getattr(cv2_module, "setNumThreads", None)
+        if callable(set_num_threads):
+            set_num_threads(1)
     except Exception:
         pass
 
 
-if __name__ == "__main__":
+def main() -> None:
     ensure_cuda_loader_compat()
     configure_cpu_limits()
-
-    from app.infrastructure.workers.tryon_worker import run_tryon_worker
-
+    worker_module = importlib.import_module("app.infrastructure.workers.tryon_worker")
+    run_tryon_worker = getattr(worker_module, "run_tryon_worker")
     asyncio.run(run_tryon_worker())
+
+
+if __name__ == "__main__":
+    main()

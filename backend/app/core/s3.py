@@ -1,1 +1,3 @@
-from app.infrastructure.storage.s3 import *  # noqa: F401,F403
+from app.infrastructure.storage.s3 import S3Client, s3_client
+
+__all__ = ["S3Client", "s3_client"]

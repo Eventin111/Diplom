@@ -12,36 +12,30 @@ from typing import Optional
 
 from PIL import Image
 
+from app.application.dto.media_dto import MediaType
 from app.application.dto.tryon_dto import TryOnRequest
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
-from app.infrastructure.cache.tryon_cache import (
-    build_tryon_cache_key,
-    cache_tryon_result,
-    get_cached_tryon_result,
-)
-from app.infrastructure.db.db import AsyncSessionLocal
-from app.infrastructure.db.db import engine
+from app.infrastructure.cache.tryon_cache import build_tryon_cache_key, cache_tryon_result, get_cached_tryon_result
+from app.infrastructure.db.db import AsyncSessionLocal, engine
 from app.infrastructure.db.schema_compat import ensure_schema_compatibility
 from app.infrastructure.maintenance.tryon_cleanup import maybe_run_periodic_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import maybe_run_periodic_tryon_recovery
+from app.infrastructure.ml.ootd_service import get_ootd_service
+from app.infrastructure.persistence.repositories.media_repo import MediaRepository
+from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
+from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (
     acquire_tryon_processing_lock,
     dequeue_tryon_task,
     enqueue_tryon_dead_letter,
     enqueue_tryon_task,
-    set_tryon_worker_heartbeat,
     release_tryon_processing_lock,
+    set_tryon_worker_heartbeat,
 )
-from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.infrastructure.storage.local_media import build_local_media_path
 from app.infrastructure.storage.s3 import s3_client
-from app.infrastructure.persistence.repositories.media_repo import MediaRepository
-from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
-from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
-from app.application.dto.media_dto import MediaType
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +88,7 @@ def _get_cuda_runtime_snapshot() -> dict[str, object]:
     cuda_probe = "env-hint"
 
     try:
-        import torch  # type: ignore
+        import torch
 
         cuda_available = bool(torch.cuda.is_available())
         cuda_probe = "torch"
