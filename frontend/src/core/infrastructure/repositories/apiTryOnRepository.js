@@ -21,25 +21,46 @@ const normalizeMediaUrl = (value) => {
 };
 
 const normalizeTryOnSessionPayload = (payload) => {
-  const nestedSession = payload?.session || {};
-  const status = payload?.status || nestedSession?.status || '';
-  const errorText = payload?.error_text || nestedSession?.error_text || '';
-  const resultMediaId = payload?.result_media_id ?? nestedSession?.result_media_id ?? null;
-  const resolvedResultUrl = normalizeMediaUrl(
-    payload?.result_image_url ||
-      payload?.resultUrl ||
-      payload?.results?.[0] ||
-      nestedSession?.result_image_url ||
-      (resultMediaId ? `/api/v1/media/${resultMediaId}/file` : '')
-  );
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
 
-  return {
-    ...payload,
-    status,
-    error_text: errorText,
-    result_media_id: resultMediaId,
-    result_image_url: resolvedResultUrl
-  };
+  const normalizedPayload = { ...payload };
+  const nestedSession = payload.session && typeof payload.session === 'object' ? payload.session : null;
+
+  if (!normalizedPayload.status && nestedSession?.status) {
+    normalizedPayload.status = nestedSession.status;
+  }
+
+  if (normalizedPayload.error_text === undefined && nestedSession?.error_text !== undefined) {
+    normalizedPayload.error_text = nestedSession.error_text;
+  }
+
+  const payloadResultMediaId = normalizedPayload.result_media_id;
+  const nestedResultMediaId = nestedSession?.result_media_id;
+  const resolvedResultMediaId =
+    payloadResultMediaId !== undefined && payloadResultMediaId !== null
+      ? payloadResultMediaId
+      : nestedResultMediaId !== undefined && nestedResultMediaId !== null
+        ? nestedResultMediaId
+        : null;
+
+  if (normalizedPayload.result_media_id === undefined && resolvedResultMediaId !== null) {
+    normalizedPayload.result_media_id = resolvedResultMediaId;
+  }
+
+  const candidateResultUrl =
+    normalizedPayload.result_image_url ||
+    normalizedPayload.resultUrl ||
+    normalizedPayload?.results?.[0] ||
+    nestedSession?.result_image_url ||
+    (resolvedResultMediaId !== null ? `/api/v1/media/${resolvedResultMediaId}/file` : null);
+
+  if (candidateResultUrl) {
+    normalizedPayload.result_image_url = normalizeMediaUrl(candidateResultUrl);
+  }
+
+  return normalizedPayload;
 };
 
 const buildTryOnWebSocketUrl = (sessionId) => {
@@ -59,7 +80,13 @@ const blobToJpegFile = async (blob, fallbackName, options = {}) => {
     return new File([blob], fallbackName, { type: 'image/jpeg' });
   }
 
-  if (typeof document === 'undefined') {
+  const hasDomImageTools =
+    typeof document !== 'undefined' &&
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    typeof URL.revokeObjectURL === 'function';
+
+  if (!hasDomImageTools) {
     return new File([blob], fallbackName, { type: blob.type || 'image/jpeg' });
   }
 

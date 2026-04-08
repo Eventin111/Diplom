@@ -104,7 +104,7 @@ describe('apiTryOnRepository', () => {
     });
 
     expect(payload.sessionId).toBe(33);
-    expect(payload.resultUrl).toBe('/media/tryon/result.png');
+    expect(payload.resultUrl).toBe('http://localhost:8000/media/tryon/result.png');
     expect(global.fetch).toHaveBeenNthCalledWith(1, 'https://example.com/model.png');
     expect(global.fetch).toHaveBeenNthCalledWith(
       2,
@@ -205,5 +205,131 @@ describe('apiTryOnRepository', () => {
         clothImage: new File(['cloth'], 'cloth.jpg', { type: 'image/jpeg' })
       })
     ).rejects.toThrow('Try-on request failed: 422 bad input');
+  });
+
+  it('falls back to response text when try-on request error is not json', async () => {
+    global.fetch.mockResolvedValueOnce(errorResponse({ status: 502, text: 'upstream fail', jsonFails: true }));
+    const repository = createApiTryOnRepository();
+
+    await expect(
+      repository.runTryOn({
+        modelImage: new File(['model'], 'model.png', { type: 'image/png' }),
+        clothImage: new File(['cloth'], 'cloth.jpg', { type: 'image/jpeg' })
+      })
+    ).rejects.toThrow('Try-on request failed: 502 upstream fail');
+  });
+
+  it('adds auth header when loading try-on session if token exists', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(okResponse({ id: 77, status: 'queued' }));
+    const repository = createApiTryOnRepository();
+
+    await repository.getTryOnSession(77);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/tryon/sessions/77',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token'
+        })
+      })
+    );
+  });
+
+  it('normalizes nested session payload fields', async () => {
+    global.fetch.mockResolvedValueOnce(
+      okResponse({
+        session: {
+          id: 99,
+          status: 'completed',
+          result_media_id: 321,
+          error_text: null
+        }
+      })
+    );
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.getTryOnSession(99)).resolves.toEqual(
+      expect.objectContaining({
+        session: expect.objectContaining({ id: 99, status: 'completed' }),
+        status: 'completed',
+        result_media_id: 321,
+        result_image_url: 'http://localhost:8000/api/v1/media/321/file'
+      })
+    );
+  });
+
+  it('passes through non-object websocket payloads', () => {
+    const onMessage = jest.fn();
+    const repository = createApiTryOnRepository();
+
+    const socket = repository.subscribeToTryOnSession(17, { onMessage });
+    socket.onmessage({ data: JSON.stringify('queued') });
+
+    expect(onMessage).toHaveBeenCalledWith('queued');
+  });
+
+  it('renders through canvas conversion path when URL.createObjectURL is available', async () => {
+    const originalImage = global.Image;
+    const originalCreateObjectURL = global.URL.createObjectURL;
+    const originalRevokeObjectURL = global.URL.revokeObjectURL;
+    const originalCreateElement = document.createElement.bind(document);
+
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock');
+    global.URL.revokeObjectURL = jest.fn();
+
+    class MockImage {
+      constructor() {
+        this.naturalWidth = 1200;
+        this.naturalHeight = 800;
+      }
+      set src(_value) {
+        setTimeout(() => this.onload?.(), 0);
+      }
+    }
+
+    global.Image = MockImage;
+    const drawImage = jest.fn();
+    const toBlob = jest.fn((callback) => callback(new Blob(['jpeg'], { type: 'image/jpeg' })));
+    jest.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage }),
+          toBlob
+        };
+      }
+      return originalCreateElement(tagName, options);
+    });
+
+    global.fetch.mockResolvedValueOnce(
+      okResponse({
+        session_id: 45,
+        queued: false,
+        result_image_url: '/api/v1/media/12/file',
+        status: 'completed'
+      })
+    );
+
+    try {
+      const repository = createApiTryOnRepository();
+      const payload = await repository.runTryOn({
+        modelImage: new File(['model'], 'model.png', { type: 'image/png' }),
+        clothImage: new File(['cloth'], 'cloth.png', { type: 'image/png' })
+      });
+
+      expect(payload.status).toBe('completed');
+      expect(global.URL.createObjectURL).toHaveBeenCalled();
+      expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+      expect(drawImage).toHaveBeenCalled();
+      expect(toBlob).toHaveBeenCalled();
+    } finally {
+      document.createElement.mockRestore();
+      global.Image = originalImage;
+      global.URL.createObjectURL = originalCreateObjectURL;
+      global.URL.revokeObjectURL = originalRevokeObjectURL;
+    }
   });
 });
