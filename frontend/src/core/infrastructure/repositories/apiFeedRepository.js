@@ -35,6 +35,15 @@ const request = async (path, init = {}) => {
 };
 
 export const createApiFeedRepository = () => ({
+  async fetchFeedItems({ skip = 0, limit = 200 } = {}) {
+    const query = new URLSearchParams({
+      skip: String(skip),
+      limit: String(limit)
+    });
+    const payload = await request(`/?${query.toString()}`);
+    return Array.isArray(payload?.items) ? payload.items : [];
+  },
+
   async fetchLikedFeedIds() {
     const payload = await request('/liked-ids');
     return Array.isArray(payload?.items) ? payload.items : [];

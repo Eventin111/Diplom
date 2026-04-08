@@ -4,24 +4,23 @@ export const MOCK_POSTS = [
     image: 'https://via.placeholder.com/360x480?text=Outfit+1',
     description: 'Классная летняя футболка',
     user: { username: 'fashion_user', avatar: '👩' },
-    likes: 234,
-    comments: 12
+    likes: 0,
+    comments: 0
   },
   {
     id: 2,
     image: 'https://via.placeholder.com/360x480?text=Outfit+2',
     description: 'Стильная куртка',
     user: { username: 'coolguy', avatar: '🧑' },
-    likes: 120,
-    comments: 5
+    likes: 0,
+    comments: 0
   },
   {
     id: 3,
     image: 'https://via.placeholder.com/360x480?text=Outfit+3',
     description: 'Базовый образ на каждый день',
     user: { username: 'urban_style', avatar: '👨' },
-    likes: 87,
-    comments: 3
+    likes: 0,
+    comments: 0
   }
 ];
-

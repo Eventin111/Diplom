@@ -4,7 +4,6 @@ import ProfilePage from '../ProfilePage/ProfilePage';
 import SearchPage from '../SearchPage/SearchPage';
 import ChatPage from '../ChatPage/ChatPage';
 import MusicTicker from '../../components/MusicTicker/MusicTicker';
-import { fetchLikedFeedIds } from '../../core/application/usecases/fetchLikedFeedIds';
 import { likeFeedItem } from '../../core/application/usecases/likeFeedItem';
 import { unlikeFeedItem } from '../../core/application/usecases/unlikeFeedItem';
 import { createApiFeedRepository } from '../../core/infrastructure/repositories/apiFeedRepository';
@@ -32,6 +31,7 @@ const FeedPage = () => {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isLiked, setIsLiked] = useState({});
   const [likeCounts, setLikeCounts] = useState({});
+  const [commentCounts, setCommentCounts] = useState({});
   const [photoTransition, setPhotoTransition] = useState(false);
   
   // Настройки из localStorage
@@ -91,10 +91,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Классический костюм и рубашка для офиса #офисныйстиль #деловойкостюм',
-      likes: 2450,
-      comments: 320,
-      shares: 45,
-      tryOnCount: 124,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#костюм', '#офис', '#деловойстиль'],
@@ -117,10 +117,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Подборка вечерних платьев для особого случая #вечернийобраз #платье',
-      likes: 1890,
-      comments: 210,
-      shares: 32,
-      tryOnCount: 89,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#платье', '#вечер', '#образ'],
@@ -143,10 +143,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Спортивная коллекция для активного отдыха #спорт #стиль #тренировки',
-      likes: 3250,
-      comments: 450,
-      shares: 120,
-      tryOnCount: 210,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#спорт', '#тренировки', '#активныйстиль'],
@@ -169,10 +169,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Капсула для города: обувь и базовые вещи #повседневка #городскойстиль',
-      likes: 1560,
-      comments: 189,
-      shares: 45,
-      tryOnCount: 98,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#повседневка', '#зара', '#городскойстиль'],
@@ -195,10 +195,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Верхняя одежда на осень: пальто и куртки #пальто #классика #осень',
-      likes: 2780,
-      comments: 320,
-      shares: 67,
-      tryOnCount: 145,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#пальто', '#классика', '#осень'],
@@ -221,10 +221,10 @@ const FeedPage = () => {
         'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?auto=format&fit=crop&w=900&q=85&fm=jpg'
       ],
       description: 'Бохо-образы и легкие ткани для теплого сезона #бохо #свободныйстиль #творчество',
-      likes: 1420,
-      comments: 167,
-      shares: 38,
-      tryOnCount: 76,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      tryOnCount: 0,
       music: COMMON_TRACK_TITLE,
       audioUrl: COMMON_AUDIO_URL,
       tags: ['#бохо', '#свободныйстиль', '#творчество'],
@@ -238,31 +238,54 @@ const FeedPage = () => {
   ];
 
   useEffect(() => {
-    setLikeCounts(
-      samplePosts.reduce((acc, post) => {
-        acc[post.id] = post.likes;
-        return acc;
-      }, {})
-    );
-  }, []);
-
-  useEffect(() => {
     let isMounted = true;
 
     void (async () => {
       try {
-        const likedIds = await fetchLikedFeedIds(feedRepository);
+        const feedItems = await feedRepository.fetchFeedItems({ skip: 0, limit: 200 });
         if (!isMounted) {
           return;
         }
+
+        const byId = new Map(feedItems.map((item) => [Number(item?.id), item]));
+
+        setLikeCounts(
+          samplePosts.reduce((acc, post) => {
+            acc[post.id] = Number(byId.get(post.id)?.likes_count || 0);
+            return acc;
+          }, {})
+        );
+
+        setCommentCounts(
+          samplePosts.reduce((acc, post) => {
+            acc[post.id] = Number(byId.get(post.id)?.comments_count || 0);
+            return acc;
+          }, {})
+        );
+
         setIsLiked(
-          likedIds.reduce((acc, id) => {
-            acc[id] = true;
+          samplePosts.reduce((acc, post) => {
+            acc[post.id] = Boolean(byId.get(post.id)?.is_liked);
             return acc;
           }, {})
         );
       } catch (error) {
-        // keep feed usable even if likes API is temporarily unavailable
+        if (!isMounted) {
+          return;
+        }
+        setLikeCounts(
+          samplePosts.reduce((acc, post) => {
+            acc[post.id] = 0;
+            return acc;
+          }, {})
+        );
+        setCommentCounts(
+          samplePosts.reduce((acc, post) => {
+            acc[post.id] = 0;
+            return acc;
+          }, {})
+        );
+        setIsLiked({});
       }
     })();
 
@@ -841,7 +864,7 @@ const FeedPage = () => {
                     <span className="action-icon">
                       <img src={commentsIcon} alt="" className="action-icon-img" />
                     </span>
-                    <span className="action-count">{post.comments}</span>
+                    <span className="action-count">{commentCounts[post.id] ?? 0}</span>
                   </button>
 
                   <button 

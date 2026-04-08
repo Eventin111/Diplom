@@ -51,6 +51,24 @@ describe('apiFeedRepository', () => {
     );
   });
 
+  it('returns feed items with stats from feed endpoint', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(okResponse({ items: [{ id: 1, likes_count: 3, comments_count: 0, is_liked: true }] }));
+    const repository = createApiFeedRepository();
+
+    await expect(repository.fetchFeedItems({ skip: 0, limit: 5 })).resolves.toEqual([
+      { id: 1, likes_count: 3, comments_count: 0, is_liked: true }
+    ]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/feed/?skip=0&limit=5',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token'
+        })
+      })
+    );
+  });
+
   it('sends like and unlike requests with proper methods', async () => {
     localStorage.setItem('swipelt_token', 'token');
     global.fetch
