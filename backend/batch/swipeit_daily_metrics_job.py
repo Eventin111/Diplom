@@ -65,6 +65,8 @@ def _to_async_db_url(db_url: str) -> str:
         return db_url
     if db_url.startswith("postgresql://"):
         return db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if db_url.startswith("postgres://"):
+        return db_url.replace("postgres://", "postgresql+asyncpg://", 1)
     raise ValueError("Unsupported DB URL. Expected postgresql://...")
 
 
