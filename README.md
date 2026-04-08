@@ -114,6 +114,15 @@ conda run -n ootd python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 - Backend: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
 
+### 5.1 Backend service (uv + Docker + CI/CD)
+
+- pin зависимостей backend: `backend/pyproject.toml` + `backend/uv.lock`
+- локальная синхронизация зависимостей: `uv sync --project backend --frozen --group dev`
+- Dockerfile сервиса: `backend/Dockerfile`
+- CI линтеров/тестов: `.github/workflows/ci.yml`
+- CD push-модель деплоя на удалённый сервер: `.github/workflows/deploy-backend.yml`
+- registry образов: `ghcr.io/<owner>/diplom-backend`
+
 ### 6. Запуск frontend
 
 Установи frontend-зависимости один раз:

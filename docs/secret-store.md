@@ -25,8 +25,11 @@
 
 `SECRET_KEY`, `DB_URL`, `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `AIRFLOW_ADMIN_PASSWORD`, `AIRFLOW_CONN_SWIPEIT_BATCH_DB`.
 
-## Правила
+## GitHub Secrets (деплой backend)
 
+`DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`, `GHCR_USERNAME`, `GHCR_READ_TOKEN`.
+
+## Правила
 1. Не писать реальные секреты в `.env.example`, `README`, `docker-compose*.yml`.
 2. Новый секрет добавлять сразу в шаблон `.env.example` и в GitHub Secrets (если нужен в CI/CD).
 3. `AIRFLOW_ADMIN_PASSWORD` задавать явно, не использовать `admin`.
