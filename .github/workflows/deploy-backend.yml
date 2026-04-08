@@ -76,7 +76,6 @@ jobs:
             cd "$DEPLOY_PATH"
             echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             export BACKEND_IMAGE="$IMAGE_REF"
-            export TRYON_WORKER_IMAGE="$IMAGE_REF"
-            docker compose pull backend tryon-worker
-            docker compose up -d backend tryon-worker
+            docker compose pull backend
+            docker compose up -d backend
             docker image prune -f
