@@ -165,6 +165,45 @@ describe('backendAuthRepository', () => {
     expect(session.user.username).toBe('new_user');
   });
 
+  it('updates profile and persists returned user', async () => {
+    const storage = createMemoryStorage();
+    storage.setItem('swipelt_token', 'token-upd');
+    apiFetch.mockResolvedValueOnce({
+      id: 11,
+      email: 'updated@mail.com',
+      username: 'updated_user',
+      avatar_url: 'https://img.test/new-avatar.png'
+    });
+
+    const repository = createBackendAuthRepository({
+      storage,
+      config: createConfig()
+    });
+
+    const user = await repository.updateProfile({
+      email: 'Updated@mail.com',
+      username: 'updated_user',
+      avatar: 'https://img.test/new-avatar.png'
+    });
+
+    expect(user.email).toBe('updated@mail.com');
+    expect(user.avatar).toBe('https://img.test/new-avatar.png');
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/auth/me',
+      expect.objectContaining({
+        method: 'PATCH',
+        withAuth: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'updated@mail.com',
+          username: 'updated_user',
+          avatar_url: 'https://img.test/new-avatar.png'
+        })
+      })
+    );
+    expect(storage.getItem('swipelt_user')).toContain('updated@mail.com');
+  });
+
   it('returns fallback register error message', async () => {
     apiFetch.mockRejectedValueOnce(new Error(''));
     const repository = createBackendAuthRepository({

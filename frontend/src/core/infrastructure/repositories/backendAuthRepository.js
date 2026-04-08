@@ -158,6 +158,36 @@ export const createBackendAuthRepository = (deps = {}) => {
       return this.login({ email: payload.email, password: payload.password });
     },
 
+    async updateProfile(partialUser) {
+      const payload = {};
+
+      if (partialUser?.email) {
+        payload.email = String(partialUser.email).trim().toLowerCase();
+      }
+      if (partialUser?.username) {
+        payload.username = String(partialUser.username).trim();
+      }
+      if (partialUser?.avatar || partialUser?.avatar_url) {
+        payload.avatar_url = partialUser.avatar || partialUser.avatar_url;
+      }
+
+      const rawUser = await apiFetch('/api/v1/auth/me', {
+        method: 'PATCH',
+        withAuth: true,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const token = storage.getItem(keys.token);
+      const user = toUserEntity(rawUser);
+      if (token) {
+        persistSession(token, user);
+      }
+      return user;
+    },
+
     logout() {
       clearSession();
     }
