@@ -24,6 +24,11 @@ const normalizeProfilePhoto = (media) => ({
   date: media.created_at ? new Date(media.created_at).toLocaleDateString() : new Date().toLocaleDateString()
 });
 
+const isTryOnMediaAsset = (media) => {
+  const key = String(media?.storage_key || '').toLowerCase();
+  return key.includes('/tryon/') || key.includes('\\tryon\\');
+};
+
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -178,7 +183,9 @@ const ProfilePage = () => {
           preparedFiles.map((item) => uploadMedia(mediaRepository, item.uploadFile))
         );
 
-        const canonicalPhotos = (await mediaRepository.fetchMyMedia()).map(normalizeProfilePhoto);
+        const canonicalPhotos = (await mediaRepository.fetchMyMedia())
+          .filter((item) => !isTryOnMediaAsset(item))
+          .map(normalizeProfilePhoto);
         setTryOnPhotos(canonicalPhotos);
         persistTryOnPhotos(canonicalPhotos);
 
@@ -285,7 +292,9 @@ const ProfilePage = () => {
           return;
         }
 
-        const serverPhotos = mediaItems.map(normalizeProfilePhoto);
+        const serverPhotos = mediaItems
+          .filter((item) => !isTryOnMediaAsset(item))
+          .map(normalizeProfilePhoto);
         setTryOnPhotos(serverPhotos);
         persistTryOnPhotos(serverPhotos);
 
