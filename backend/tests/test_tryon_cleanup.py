@@ -56,6 +56,8 @@ def test_delete_tryon_runtime_artifacts_deletes_snapshot_and_lock(monkeypatch):
 
     assert "tryon:task:33" in fake_redis.deleted_keys
     assert "tryon:processing:33" in fake_redis.deleted_keys
+    assert "tryon:cancel:33" in fake_redis.deleted_keys
+    assert "tryon:runtime:pid:33" in fake_redis.deleted_keys
 
 
 def test_maybe_run_periodic_tryon_cleanup_skips_until_interval(monkeypatch):

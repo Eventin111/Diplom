@@ -131,3 +131,27 @@ def test_enqueue_task_stores_snapshot_and_can_read_it(monkeypatch):
     restored = asyncio.run(scenario())
 
     assert restored == payload
+
+
+def test_cancellation_and_runtime_pid_helpers_roundtrip(monkeypatch):
+    module = reload_tryon_queue_module()
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(module, "get_redis_client", lambda: fake_redis)
+
+    async def scenario():
+        await module.request_tryon_cancellation(51)
+        canceled_before_clear = await module.is_tryon_cancellation_requested(51)
+        await module.set_tryon_runtime_pid(51, 4321)
+        runtime_pid = await module.get_tryon_runtime_pid(51)
+        await module.clear_tryon_runtime_pid(51)
+        runtime_pid_after_clear = await module.get_tryon_runtime_pid(51)
+        await module.clear_tryon_cancellation(51)
+        canceled_after_clear = await module.is_tryon_cancellation_requested(51)
+        return (
+            canceled_before_clear,
+            runtime_pid,
+            runtime_pid_after_clear,
+            canceled_after_clear,
+        )
+
+    assert asyncio.run(scenario()) == (True, 4321, None, False)

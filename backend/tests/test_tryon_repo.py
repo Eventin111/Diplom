@@ -62,6 +62,7 @@ def test_get_status_counts_fills_missing_statuses():
         "processing": 0,
         "completed": 5,
         "failed": 0,
+        "canceled": 0,
     }
 
 
