@@ -1,0 +1,21 @@
+services:
+  backend:
+    environment:
+      ML_DEVICE: ${ML_DEVICE:-cuda}
+      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-true}
+
+  tryon-worker:
+    environment:
+      ML_DEVICE: ${ML_DEVICE:-cuda}
+      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-true}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    gpus: ${TRYON_GPUS:-all}
+    runtime: ${TRYON_RUNTIME:-nvidia}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${TRYON_GPU_COUNT:-1}
+              capabilities: [gpu]

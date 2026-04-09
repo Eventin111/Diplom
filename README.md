@@ -123,6 +123,13 @@ conda run -n ootd python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 - CD push-модель деплоя на удалённый сервер: `.github/workflows/deploy-backend.yml`
 - registry образов: `ghcr.io/<owner>/diplom-backend`
 
+### 5.2 Frontend service (Docker + CI/CD)
+
+- Dockerfile сервиса: `frontend/Dockerfile`
+- контейнер отдает SPA через `nginx`, а `/api/*` проксирует в `backend`
+- CD push-модель деплоя фронта: `.github/workflows/deploy-frontend.yml`
+- registry образов: `ghcr.io/<owner>/diplom-frontend`
+
 ### 6. Запуск frontend
 
 Установи frontend-зависимости один раз:
@@ -148,6 +155,24 @@ conda run -n ootd npx serve -s build -l 4173
 ```
 
 - Stable frontend: `http://localhost:4173`
+
+Запуск фронта и бэка как контейнеров:
+
+```bash
+docker compose up -d frontend backend postgres minio redis
+```
+
+Для локального запуска try-on без GPU используется CPU-safe конфигурация по умолчанию:
+
+```bash
+docker compose up -d tryon-worker
+```
+
+Если у машины есть NVIDIA GPU, запускай с override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d tryon-worker
+```
 
 ### 7. Что сейчас сохраняется в БД
 

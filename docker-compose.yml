@@ -1,4 +1,24 @@
 services:
+  frontend:
+    platform: linux/amd64
+    image: ${FRONTEND_IMAGE:-swipeit-frontend:local}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_NAME: ${FRONTEND_APP_NAME:-Swipelt}
+        REACT_APP_API_BASE_URL: ${FRONTEND_REACT_APP_API_BASE_URL:-}
+        REACT_APP_TRYON_MAX_PROCESSING_SECONDS: ${FRONTEND_TRYON_MAX_PROCESSING_SECONDS:-600}
+        REACT_APP_USE_MOCK_DATA: ${FRONTEND_USE_MOCK_DATA:-false}
+        REACT_APP_MOCK_DELAY_MS: ${FRONTEND_MOCK_DELAY_MS:-0}
+        REACT_APP_AUTH_INIT_DELAY_MS: ${FRONTEND_AUTH_INIT_DELAY_MS:-300}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_started
+
   backend:
     platform: linux/amd64
     image: ${BACKEND_IMAGE:-swipeit-backend:local}
@@ -12,6 +32,7 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       DB_URL: ${DOCKER_DB_URL:-postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-swipeit}}
+      ML_DEVICE: ${ML_DEVICE:-cpu}
       S3_ENDPOINT: ${DOCKER_S3_ENDPOINT:-http://minio:9000}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-swipeit-media}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
@@ -19,7 +40,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_SECURE: ${S3_SECURE:-false}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
-      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-true}
+      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-false}
       TRYON_WORKER_HEARTBEAT_TTL_SECONDS: ${TRYON_WORKER_HEARTBEAT_TTL_SECONDS:-30}
       TRYON_RECOVERY_INTERVAL_SECONDS: ${TRYON_RECOVERY_INTERVAL_SECONDS:-60}
       TRYON_STALE_PROCESSING_THRESHOLD_SECONDS: ${TRYON_STALE_PROCESSING_THRESHOLD_SECONDS:-600}
@@ -45,6 +66,7 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       DB_URL: ${DOCKER_DB_URL:-postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-swipeit}}
+      ML_DEVICE: ${ML_DEVICE:-cpu}
       S3_ENDPOINT: ${DOCKER_S3_ENDPOINT:-http://minio:9000}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-swipeit-media}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
@@ -52,7 +74,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_SECURE: ${S3_SECURE:-false}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
-      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-true}
+      TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-false}
       TRYON_WORKER_HEARTBEAT_TTL_SECONDS: ${TRYON_WORKER_HEARTBEAT_TTL_SECONDS:-30}
       TRYON_RECOVERY_INTERVAL_SECONDS: ${TRYON_RECOVERY_INTERVAL_SECONDS:-60}
       TRYON_STALE_PROCESSING_THRESHOLD_SECONDS: ${TRYON_STALE_PROCESSING_THRESHOLD_SECONDS:-600}
@@ -64,17 +86,6 @@ services:
       TORCH_NUM_INTEROP_THREADS: ${TRYON_TORCH_NUM_INTEROP_THREADS:-1}
       PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:64,garbage_collection_threshold:0.8}
       PYTORCH_NO_CUDA_MEMORY_CACHING: ${PYTORCH_NO_CUDA_MEMORY_CACHING:-1}
-      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
-      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
-    gpus: ${TRYON_GPUS:-all}
-    runtime: ${TRYON_RUNTIME:-nvidia}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: ${TRYON_GPU_COUNT:-1}
-              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
