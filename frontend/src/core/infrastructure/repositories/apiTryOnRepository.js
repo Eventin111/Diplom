@@ -4,6 +4,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const buildTryOnUrl = () => `${appConfig.apiBaseUrl}/api/v1/tryon/try-on`;
 const buildTryOnSessionStatusUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}`;
+const buildTryOnSessionCancelUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}/cancel`;
 const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
 const MODEL_MAX_UPLOAD_DIMENSION = 896;
 const CLOTH_MAX_UPLOAD_DIMENSION = 768;
@@ -18,6 +19,14 @@ const normalizeMediaUrl = (value) => {
   } catch (error) {
     return value;
   }
+};
+
+const resolveBrowserOrigin = () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '';
 };
 
 const normalizeTryOnSessionPayload = (payload) => {
@@ -65,8 +74,9 @@ const normalizeTryOnSessionPayload = (payload) => {
 
 const buildTryOnWebSocketUrl = (sessionId) => {
   const token = getAuthToken();
-  const normalizedBaseUrl = String(appConfig.apiBaseUrl || '').replace(/^http/i, 'ws');
-  const url = new URL(`${normalizedBaseUrl}/api/v1/tryon/sessions/${sessionId}/ws`);
+  const rawBaseUrl = String(appConfig.apiBaseUrl || '').trim() || resolveBrowserOrigin();
+  const normalizedBaseUrl = rawBaseUrl.replace(/^http/i, 'ws');
+  const url = new URL(`/api/v1/tryon/sessions/${sessionId}/ws`, normalizedBaseUrl);
   if (token) {
     url.searchParams.set('token', token);
   }
@@ -279,6 +289,33 @@ export const createApiTryOnRepository = () => ({
         detail = await response.text();
       }
       throw new Error(`Try-on session request failed: ${response.status} ${detail}`);
+    }
+
+    const payload = await response.json();
+    return normalizeTryOnSessionPayload(payload);
+  },
+
+  async cancelTryOnSession(sessionId) {
+    const headers = {};
+    const token = getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(buildTryOnSessionCancelUrl(sessionId), {
+      method: 'POST',
+      headers
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const payload = await response.json();
+        detail = payload?.detail || JSON.stringify(payload);
+      } catch (error) {
+        detail = await response.text();
+      }
+      throw new Error(`Try-on cancel request failed: ${response.status} ${detail}`);
     }
 
     const payload = await response.json();

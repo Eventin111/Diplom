@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { appConfig } from '../../config/appConfig';
+import { cancelTryOnSession } from '../../core/application/usecases/cancelTryOnSession';
 import { getTryOnSession } from '../../core/application/usecases/getTryOnSession';
 import { startTryOnSession } from '../../core/application/usecases/startTryOnSession';
 import { subscribeToTryOnSession } from '../../core/application/usecases/subscribeToTryOnSession';
@@ -81,6 +82,7 @@ const TryOnPage = () => {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [sessionId, setSessionId] = useState(null);
   const [serverStatus, setServerStatus] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const outfit = location.state?.outfit || {
     brand: 'Бренд не указан',
@@ -128,6 +130,7 @@ const TryOnPage = () => {
     if (nextStatus === 'completed') {
       terminalStatusSeenRef.current = true;
       timeoutHandledRef.current = false;
+      setIsCancelling(false);
       setProgress(100);
       setActiveStepIndex(INFERENCE_STEPS.length - 1);
       setResultImage(payload?.result_image_url || '');
@@ -139,7 +142,18 @@ const TryOnPage = () => {
     if (nextStatus === 'failed') {
       terminalStatusSeenRef.current = true;
       timeoutHandledRef.current = false;
+      setIsCancelling(false);
       setError(payload?.error_text || 'Примерка завершилась с ошибкой.');
+      setIsProcessing(false);
+      closeTryOnSocket();
+      return;
+    }
+
+    if (nextStatus === 'canceled') {
+      terminalStatusSeenRef.current = true;
+      timeoutHandledRef.current = false;
+      setIsCancelling(false);
+      setError(payload?.error_text || 'Примерка отменена.');
       setIsProcessing(false);
       closeTryOnSocket();
     }
@@ -235,6 +249,7 @@ const TryOnPage = () => {
     setError('');
     setSessionId(null);
     setServerStatus('');
+    setIsCancelling(false);
     terminalStatusSeenRef.current = false;
     timeoutHandledRef.current = false;
     closeTryOnSocket();
@@ -288,6 +303,7 @@ const TryOnPage = () => {
     setActiveStepIndex(0);
     setSessionId(null);
     setServerStatus('');
+    setIsCancelling(false);
     terminalStatusSeenRef.current = false;
     timeoutHandledRef.current = false;
     closeTryOnSocket();
@@ -341,6 +357,21 @@ const TryOnPage = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleCancelTryOn = async () => {
+    if (!sessionId || !isProcessing || isCancelling) {
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const payload = await cancelTryOnSession(tryOnRepository, sessionId);
+      applySessionUpdate(payload);
+    } catch (cancelError) {
+      setIsCancelling(false);
+      setError(cancelError?.message || 'Не удалось отменить примерку.');
+    }
   };
 
   const handleShare = async () => {
@@ -540,6 +571,15 @@ const TryOnPage = () => {
                   {step}
                 </div>
               ))}
+            </div>
+            <div className="tryon-result-actions">
+              <button
+                className="tryon-btn tryon-btn--secondary"
+                onClick={handleCancelTryOn}
+                disabled={isCancelling}
+              >
+                {isCancelling ? 'Отменяем...' : 'Отменить примерку'}
+              </button>
             </div>
           </section>
         )}

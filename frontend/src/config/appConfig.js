@@ -11,9 +11,17 @@ const toNumber = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const resolveApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_BASE_URL !== undefined) {
+    return process.env.REACT_APP_API_BASE_URL;
+  }
+
+  return 'http://localhost:8000';
+};
+
 export const appConfig = Object.freeze({
   appName: process.env.REACT_APP_NAME || 'Swipelt',
-  apiBaseUrl: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000',
+  apiBaseUrl: resolveApiBaseUrl(),
   apiRequestTimeoutMs: toNumber(process.env.REACT_APP_API_TIMEOUT_MS, 15000),
   tryOnMaxProcessingSeconds: toNumber(process.env.REACT_APP_TRYON_MAX_PROCESSING_SECONDS, 600),
   useMockData: toBoolean(process.env.REACT_APP_USE_MOCK_DATA, false),
