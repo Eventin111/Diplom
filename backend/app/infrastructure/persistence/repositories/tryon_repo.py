@@ -8,6 +8,8 @@ from app.infrastructure.persistence.models.tryon import TryOnSession
 from app.application.dto.tryon_session_dto import TryOnSessionCreate
 from .base import BaseRepository
 
+_UNSET = object()
+
 class TryOnRepository(BaseRepository[TryOnSession]):
     def __init__(self):
         super().__init__(TryOnSession)
@@ -40,15 +42,15 @@ class TryOnRepository(BaseRepository[TryOnSession]):
         db: AsyncSession, 
         session_id: int, 
         status: TryOnStatus,
-        result_media_id: Optional[int] = None,
-        error_text: Optional[str] = None
+        result_media_id: Optional[int] | object = _UNSET,
+        error_text: Optional[str] | object = _UNSET,
     ) -> TryOnSession:
         session = await self.get(db, session_id)
         if session:
             session.status = status
-            if result_media_id:
+            if result_media_id is not _UNSET:
                 session.result_media_id = result_media_id
-            if error_text:
+            if error_text is not _UNSET:
                 session.error_text = error_text
             await db.commit()
             await db.refresh(session)
@@ -115,7 +117,7 @@ class TryOnRepository(BaseRepository[TryOnSession]):
     ) -> List[TryOnSession]:
         result = await db.execute(
             select(TryOnSession)
-            .where(TryOnSession.status.in_([TryOnStatus.COMPLETED, TryOnStatus.FAILED]))
+            .where(TryOnSession.status.in_([TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED]))
             .where(
                 or_(
                     TryOnSession.updated_at <= older_than,

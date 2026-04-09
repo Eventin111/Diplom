@@ -102,6 +102,14 @@ def build_tryon_task_snapshot_key(session_id: int) -> str:
     return f"tryon:task:{session_id}"
 
 
+def build_tryon_cancel_key(session_id: int) -> str:
+    return f"tryon:cancel:{session_id}"
+
+
+def build_tryon_runtime_pid_key(session_id: int) -> str:
+    return f"tryon:runtime:pid:{session_id}"
+
+
 async def acquire_tryon_processing_lock(session_id: int) -> bool:
     return bool(
         await get_redis_client().set(
@@ -119,6 +127,44 @@ async def release_tryon_processing_lock(session_id: int) -> None:
 
 async def has_tryon_processing_lock(session_id: int) -> bool:
     return bool(await get_redis_client().exists(build_tryon_processing_lock_key(session_id)))
+
+
+async def request_tryon_cancellation(session_id: int) -> None:
+    await get_redis_client().set(
+        build_tryon_cancel_key(session_id),
+        "1",
+        ex=settings.TRYON_PROCESSING_LOCK_TTL_SECONDS,
+    )
+
+
+async def is_tryon_cancellation_requested(session_id: int) -> bool:
+    return bool(await get_redis_client().exists(build_tryon_cancel_key(session_id)))
+
+
+async def clear_tryon_cancellation(session_id: int) -> None:
+    await get_redis_client().delete(build_tryon_cancel_key(session_id))
+
+
+async def set_tryon_runtime_pid(session_id: int, pid: int) -> None:
+    await get_redis_client().set(
+        build_tryon_runtime_pid_key(session_id),
+        str(pid),
+        ex=settings.TRYON_PROCESSING_LOCK_TTL_SECONDS,
+    )
+
+
+async def clear_tryon_runtime_pid(session_id: int) -> None:
+    await get_redis_client().delete(build_tryon_runtime_pid_key(session_id))
+
+
+async def get_tryon_runtime_pid(session_id: int) -> Optional[int]:
+    raw_pid = await get_redis_client().get(build_tryon_runtime_pid_key(session_id))
+    if raw_pid is None:
+        return None
+    try:
+        return int(raw_pid)
+    except (TypeError, ValueError):
+        return None
 
 
 async def get_tryon_processing_lock_count() -> int:
@@ -169,6 +215,8 @@ async def delete_tryon_runtime_artifacts(session_id: int) -> None:
     await get_redis_client().delete(
         build_tryon_task_snapshot_key(session_id),
         build_tryon_processing_lock_key(session_id),
+        build_tryon_cancel_key(session_id),
+        build_tryon_runtime_pid_key(session_id),
     )
 
 

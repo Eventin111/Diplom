@@ -3,18 +3,17 @@ from __future__ import annotations
 import asyncio
 import base64
 import gc
-import io
+import json
 import logging
 import os
+import sys
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from PIL import Image
-
 from app.application.dto.media_dto import MediaType
-from app.application.dto.tryon_dto import TryOnRequest
-from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 from app.infrastructure.cache.tryon_cache import build_tryon_cache_key, cache_tryon_result, get_cached_tryon_result
@@ -22,22 +21,31 @@ from app.infrastructure.db.db import AsyncSessionLocal, engine
 from app.infrastructure.db.schema_compat import ensure_schema_compatibility
 from app.infrastructure.maintenance.tryon_cleanup import maybe_run_periodic_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import maybe_run_periodic_tryon_recovery
-from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (
     acquire_tryon_processing_lock,
+    clear_tryon_cancellation,
+    clear_tryon_runtime_pid,
     dequeue_tryon_task,
     enqueue_tryon_dead_letter,
     enqueue_tryon_task,
+    is_tryon_cancellation_requested,
     release_tryon_processing_lock,
+    set_tryon_runtime_pid,
     set_tryon_worker_heartbeat,
 )
 from app.infrastructure.storage.local_media import build_local_media_path
 from app.infrastructure.storage.s3 import s3_client
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+TRYON_JOB_RUNNER = PROJECT_ROOT / "backend" / "run_tryon_job.py"
+
+
+class TryOnCancelledError(RuntimeError):
+    pass
 
 
 def _is_non_retriable_tryon_error(exc: Exception) -> bool:
@@ -146,15 +154,104 @@ def _load_media_bytes(storage_key: str) -> bytes:
     return file_bytes
 
 
-def _open_image(image_bytes: bytes) -> Image.Image:
-    image = Image.open(io.BytesIO(image_bytes))
-    image.load()
-    return image
-
-
 def _build_result_storage_key(user_id: int, filename: str = "result.png") -> str:
     extension = os.path.splitext(filename)[1] or ".png"
     return f"user_{user_id}/tryon/result/{uuid.uuid4()}{extension}"
+
+
+async def _terminate_process(process: asyncio.subprocess.Process, *, grace_seconds: float = 3.0) -> None:
+    if process.returncode is not None:
+        return
+
+    process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=grace_seconds)
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+
+
+async def _execute_tryon_job(
+    payload: dict[str, object],
+    *,
+    session_id: int,
+) -> dict[str, object]:
+    with tempfile.TemporaryDirectory(prefix=f"tryon-{session_id}-") as temp_dir:
+        temp_path = Path(temp_dir)
+        model_image_path = temp_path / "model.png"
+        cloth_image_path = temp_path / "cloth.png"
+        payload_path = temp_path / "payload.json"
+        result_path = temp_path / "result.json"
+        stdout_path = temp_path / "stdout.log"
+        stderr_path = temp_path / "stderr.log"
+
+        model_image_path.write_bytes(payload["model_bytes"])
+        cloth_image_path.write_bytes(payload["cloth_bytes"])
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "model_image_path": str(model_image_path),
+                    "cloth_image_path": str(cloth_image_path),
+                    "model_type": str(payload["model_type"]),
+                    "category": int(payload["category"]),
+                    "scale": float(payload["scale"]),
+                    "num_steps": int(payload["num_steps"]),
+                    "num_samples": int(payload["num_samples"]),
+                    "seed": int(payload["seed"]),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        with stdout_path.open("w", encoding="utf-8") as stdout_file, stderr_path.open("w", encoding="utf-8") as stderr_file:
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                str(TRYON_JOB_RUNNER),
+                str(payload_path),
+                str(result_path),
+                cwd=str(PROJECT_ROOT),
+                stdout=stdout_file,
+                stderr=stderr_file,
+            )
+
+            await set_tryon_runtime_pid(session_id, process.pid)
+            try:
+                while True:
+                    if await is_tryon_cancellation_requested(session_id):
+                        logger.info("Cancellation requested for try-on session %s, terminating pid=%s", session_id, process.pid)
+                        await _terminate_process(process)
+                        raise TryOnCancelledError("Try-on canceled by user")
+
+                    try:
+                        return_code = await asyncio.wait_for(process.wait(), timeout=1)
+                        break
+                    except asyncio.TimeoutError:
+                        await _publish_worker_heartbeat("processing", session_id=session_id)
+                        continue
+
+                if await is_tryon_cancellation_requested(session_id):
+                    logger.info(
+                        "Cancellation requested for try-on session %s after subprocess exit, dropping result",
+                        session_id,
+                    )
+                    raise TryOnCancelledError("Try-on canceled by user")
+
+                if return_code != 0:
+                    stderr_text = stderr_path.read_text(encoding="utf-8", errors="ignore").strip()
+                    stdout_text = stdout_path.read_text(encoding="utf-8", errors="ignore").strip()
+                    detail = stderr_text or stdout_text or f"exit_code={return_code}"
+                    raise RuntimeError(f"Try-on subprocess failed: {detail}")
+
+                if not result_path.exists():
+                    raise RuntimeError("Try-on subprocess completed without result payload")
+
+                result_payload = json.loads(result_path.read_text(encoding="utf-8"))
+                if not isinstance(result_payload, dict):
+                    raise RuntimeError("Try-on subprocess returned invalid result payload")
+                return result_payload
+            finally:
+                await clear_tryon_runtime_pid(session_id)
 
 
 async def process_tryon_task(task: dict[str, object]) -> None:
@@ -164,7 +261,6 @@ async def process_tryon_task(task: dict[str, object]) -> None:
     tryon_repo = TryOnRepository()
     event_repo = TryOnEventRepository()
     media_repo = MediaRepository()
-    use_case = TryOnUseCase(get_ootd_service())
 
     if not await acquire_tryon_processing_lock(session_id):
         logger.info("Try-on session %s is already being processed, skipping duplicate task", session_id)
@@ -176,6 +272,24 @@ async def process_tryon_task(task: dict[str, object]) -> None:
             session = await tryon_repo.get(db, session_id)
             if session is None:
                 logger.warning("Try-on session %s not found, skipping task", session_id)
+                return
+
+            if session.status == TryOnStatus.CANCELED or await is_tryon_cancellation_requested(session_id):
+                await clear_tryon_cancellation(session_id)
+                if session.status != TryOnStatus.CANCELED:
+                    await tryon_repo.update_status(
+                        db,
+                        session_id,
+                        TryOnStatus.CANCELED,
+                        error_text="Try-on canceled by user",
+                    )
+                    await event_repo.create_event(
+                        db,
+                        session_id=session_id,
+                        event_type=TryOnEventType.CANCELED,
+                        attempt=attempt,
+                        details="Try-on task canceled before processing",
+                    )
                 return
 
             avatar_media = await media_repo.get(db, int(task["avatar_media_id"]))
@@ -236,22 +350,24 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 )
                 return
 
-            request = TryOnRequest(
-                model_image=_open_image(model_bytes),
-                cloth_image=_open_image(cloth_bytes),
-                model_type=str(task["model_type"]),
-                category=int(task["category"]),
-                scale=float(task["scale"]),
-                num_steps=int(task["num_steps"]),
-                num_samples=int(task["num_samples"]),
-                seed=int(task["seed"]),
+            result = await _execute_tryon_job(
+                {
+                    "model_bytes": model_bytes,
+                    "cloth_bytes": cloth_bytes,
+                    "model_type": str(task["model_type"]),
+                    "category": int(task["category"]),
+                    "scale": float(task["scale"]),
+                    "num_steps": int(task["num_steps"]),
+                    "num_samples": int(task["num_samples"]),
+                    "seed": int(task["seed"]),
+                },
+                session_id=session_id,
             )
-            result = use_case.execute(request)
             result_media_id = None
-            result_urls = result.results
+            result_urls = list(result["results"])
 
-            if result.results:
-                result_bytes = _decode_data_url_image(result.results[0])
+            if result_urls:
+                result_bytes = _decode_data_url_image(result_urls[0])
                 result_media = await media_repo.create_with_upload(
                     db,
                     file_content=result_bytes,
@@ -261,7 +377,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                     content_type="image/png",
                 )
                 result_media_id = result_media.id
-                result_urls = [_media_file_url(result_media_id)] if result_media_id else result.results
+                result_urls = [_media_file_url(result_media_id)] if result_media_id else result_urls
 
             await tryon_repo.update_status(
                 db,
@@ -280,6 +396,23 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 cache_key,
                 results=result_urls,
                 result_media_id=result_media_id,
+            )
+    except TryOnCancelledError as exc:
+        async with AsyncSessionLocal() as db:
+            await clear_tryon_cancellation(session_id)
+            await tryon_repo.update_status(
+                db,
+                session_id,
+                TryOnStatus.CANCELED,
+                error_text=str(exc),
+            )
+            await event_repo.create_event(
+                db,
+                session_id=session_id,
+                event_type=TryOnEventType.CANCELED,
+                attempt=attempt,
+                error_text=str(exc),
+                details="Worker canceled try-on session",
             )
     except Exception as exc:
         logger.exception("Try-on worker failed for session %s (attempt %s)", session_id, attempt)
@@ -334,6 +467,7 @@ async def process_tryon_task(task: dict[str, object]) -> None:
                 details="Worker marked try-on session as failed",
             )
     finally:
+        await clear_tryon_runtime_pid(session_id)
         await release_tryon_processing_lock(session_id)
         _release_cuda_memory()
 

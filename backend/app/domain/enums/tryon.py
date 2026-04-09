@@ -6,6 +6,7 @@ class TryOnStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class TryOnEventType(str, Enum):
@@ -15,4 +16,5 @@ class TryOnEventType(str, Enum):
     RECOVERED = "recovered"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELED = "canceled"
     DEAD_LETTERED = "dead_lettered"

@@ -26,6 +26,7 @@ from app.infrastructure.queue.tryon_queue import (
     get_tryon_processing_lock_count,
     get_tryon_queue_health,
     get_tryon_worker_heartbeat,
+    request_tryon_cancellation,
     requeue_tryon_dead_letter,
 )
 from app.infrastructure.ml.ootd_service import get_ootd_service
@@ -227,6 +228,46 @@ async def get_tryon_session(
     )
 
 
+@router.post("/sessions/{session_id}/cancel", response_model=TryOnResult)
+async def cancel_tryon_session(
+    session_id: int,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tryon_repo = TryOnRepository()
+    tryon_event_repo = TryOnEventRepository()
+    session = await tryon_repo.get(db, session_id)
+
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Try-on session not found")
+
+    if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED}:
+        return TryOnResult(
+            session=TryOnSessionResponse.from_orm(session),
+            result_image_url=_build_media_file_url(session.result_media_id),
+        )
+
+    await request_tryon_cancellation(session_id)
+    session = await tryon_repo.update_status(
+        db,
+        session_id,
+        TryOnStatus.CANCELED,
+        error_text="Try-on canceled by user",
+    )
+    await tryon_event_repo.create_event(
+        db,
+        session_id=session_id,
+        event_type=TryOnEventType.CANCELED,
+        error_text="Try-on canceled by user",
+        details="Cancellation requested by user",
+    )
+
+    return TryOnResult(
+        session=TryOnSessionResponse.from_orm(session),
+        result_image_url=_build_media_file_url(session.result_media_id),
+    )
+
+
 @router.websocket("/sessions/{session_id}/ws")
 async def tryon_session_websocket(websocket: WebSocket, session_id: int):
     token = websocket.query_params.get("token")
@@ -260,7 +301,7 @@ async def tryon_session_websocket(websocket: WebSocket, session_id: int):
                     await websocket.send_json(payload)
                     last_payload = payload
 
-                if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED}:
+                if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED}:
                     await websocket.close()
                     return
 
@@ -377,6 +418,7 @@ async def tryon_system_metrics(
     db: AsyncSession = Depends(get_db),
 ):
     tryon_repo = TryOnRepository()
+    tryon_event_repo = TryOnEventRepository()
 
     try:
         queue_health = await get_tryon_queue_health()
