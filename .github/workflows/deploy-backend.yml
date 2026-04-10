@@ -140,15 +140,20 @@ jobs:
             EOF
             mkdir -p batch/airflow
             CURRENT_AIRFLOW_ADMIN_PASSWORD=""
+            CURRENT_AIRFLOW_UID=""
             if [ -f batch/airflow/.env ]; then
               CURRENT_AIRFLOW_ADMIN_PASSWORD="$(grep -E '^AIRFLOW_ADMIN_PASSWORD=' batch/airflow/.env | tail -n1 | cut -d= -f2- || true)"
+              CURRENT_AIRFLOW_UID="$(grep -E '^AIRFLOW_UID=' batch/airflow/.env | tail -n1 | cut -d= -f2- || true)"
             fi
             EFFECTIVE_AIRFLOW_ADMIN_PASSWORD="${AIRFLOW_ADMIN_PASSWORD:-$CURRENT_AIRFLOW_ADMIN_PASSWORD}"
             if [ -z "$EFFECTIVE_AIRFLOW_ADMIN_PASSWORD" ]; then
               echo "AIRFLOW_ADMIN_PASSWORD is missing. Add it to GitHub Secrets or batch/airflow/.env on server."
               exit 1
             fi
-            EFFECTIVE_AIRFLOW_UID="${AIRFLOW_UID:-$(id -u)}"
+            EFFECTIVE_AIRFLOW_UID="${AIRFLOW_UID:-$CURRENT_AIRFLOW_UID}"
+            if [ -z "$EFFECTIVE_AIRFLOW_UID" ]; then
+              EFFECTIVE_AIRFLOW_UID="$(id -u)"
+            fi
             EFFECTIVE_BATCH_DB_URL="${BATCH_DB_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-swipeit}}"
             cat > batch/airflow/.env <<EOF
             AIRFLOW_ADMIN_PASSWORD=${EFFECTIVE_AIRFLOW_ADMIN_PASSWORD}
@@ -164,6 +169,10 @@ jobs:
             docker compose up -d --no-build backend
             docker pull "$BATCH_IMAGE_REF"
             if [ -f batch/airflow/docker-compose.airflow.yml ]; then
-              docker compose -f batch/airflow/docker-compose.airflow.yml --env-file batch/airflow/.env up -d airflow-init airflow-webserver airflow-scheduler
+              if ! docker compose -f batch/airflow/docker-compose.airflow.yml --env-file batch/airflow/.env up -d airflow-init airflow-webserver airflow-scheduler; then
+                docker compose -f batch/airflow/docker-compose.airflow.yml --env-file batch/airflow/.env ps
+                docker compose -f batch/airflow/docker-compose.airflow.yml --env-file batch/airflow/.env logs --tail=200 airflow-init airflow-webserver airflow-scheduler || true
+                exit 1
+              fi
             fi
             docker image prune -f
