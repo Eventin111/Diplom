@@ -29,6 +29,12 @@
 
 `DEPLOY_HOST`, `DEPLOY_PORT`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`, `GHCR_USERNAME`, `GHCR_READ_TOKEN`.
 
+## GitHub Secrets (runtime docker-compose на сервере)
+
+Обязательные: `SECRET_KEY`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`.
+
+Опциональные (override дефолтов): `DOCKER_DB_URL`, `DOCKER_S3_ENDPOINT`, `DOCKER_REDIS_URL`, `S3_BUCKET_NAME`, `S3_REGION`, `S3_SECURE`, `ML_DEVICE`, `TRYON_REQUIRE_CUDA`, `FRONTEND_HOST_PORT`, `POSTGRES_HOST_PORT`, `POSTGRES_DB`, `POSTGRES_USER`.
+
 ## Правила
 1. Не писать реальные секреты в `.env.example`, `README`, `docker-compose*.yml`.
 2. Новый секрет добавлять сразу в шаблон `.env.example` и в GitHub Secrets (если нужен в CI/CD).
