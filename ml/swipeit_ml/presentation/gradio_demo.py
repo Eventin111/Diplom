@@ -109,6 +109,9 @@ def process_hd(vton_img, garm_img, n_samples, n_steps, image_scale, seed):
     category = 0
 
     _ensure_models_initialized()
+    assert openpose_model_hd is not None
+    assert parsing_model_hd is not None
+    assert ootd_model_hd is not None
 
     with torch.no_grad():
         garm_img = Image.open(garm_img).resize((768, 1024))
@@ -148,6 +151,9 @@ def process_dc(vton_img, garm_img, category, n_samples, n_steps, image_scale, se
         category = 2
 
     _ensure_models_initialized()
+    assert openpose_model_dc is not None
+    assert parsing_model_dc is not None
+    assert ootd_model_dc is not None
 
     with torch.no_grad():
         garm_img = Image.open(garm_img).resize((768, 1024))

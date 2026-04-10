@@ -84,6 +84,12 @@ jobs:
       - name: Run flake8
         run: python -m flake8 swipeit_ml scripts tests
 
+      - name: Run pylint
+        run: python -m pylint swipeit_ml scripts
+
+      - name: Run mypy
+        run: python -m mypy
+
   ml-tests:
     name: ML Tests
     runs-on: ubuntu-latest
