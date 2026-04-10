@@ -115,5 +115,5 @@ jobs:
             echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
             export FRONTEND_IMAGE="$IMAGE_REF"
             docker compose pull frontend
-            docker compose up -d --no-build frontend
+            docker compose up -d --no-build --no-deps frontend
             docker image prune -f
