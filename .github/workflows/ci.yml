@@ -33,19 +33,19 @@ jobs:
 
       - name: Validate no inline linter suppressions
         run: |
-          if grep -R -nE "noqa|pylint:[[:space:]]*disable|type:[[:space:]]*ignore" app alembic run_server.py run_migrations.py run_tryon_worker.py; then
+          if grep -R -nE "noqa|pylint:[[:space:]]*disable|type:[[:space:]]*ignore" app alembic/env.py run_server.py run_migrations.py run_tryon_worker.py run_tryon_job.py batch/swipeit_daily_metrics_job.py; then
             echo "Inline linter suppressions are not allowed."
             exit 1
           fi
 
       - name: Run black
-        run: uv run black --check app/main.py alembic/env.py run_server.py run_migrations.py run_tryon_worker.py
+        run: uv run black --check app alembic/env.py run_server.py run_migrations.py run_tryon_worker.py run_tryon_job.py batch/swipeit_daily_metrics_job.py
 
       - name: Run isort
-        run: uv run isort --check-only app/main.py alembic/env.py run_server.py run_migrations.py run_tryon_worker.py
+        run: uv run isort --check-only app alembic/env.py run_server.py run_migrations.py run_tryon_worker.py run_tryon_job.py batch/swipeit_daily_metrics_job.py
 
       - name: Run flake8
-        run: uv run flake8 app/main.py alembic/env.py run_server.py run_migrations.py run_tryon_worker.py
+        run: uv run flake8 app alembic/env.py run_server.py run_migrations.py run_tryon_worker.py run_tryon_job.py batch/swipeit_daily_metrics_job.py
 
       - name: Run pylint
         run: uv run pylint app/main.py alembic/env.py run_server.py run_migrations.py run_tryon_worker.py

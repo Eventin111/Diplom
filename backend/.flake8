@@ -5,3 +5,6 @@ exclude =
     .venv,
     __pycache__,
     alembic/versions
+per-file-ignores =
+    app/infrastructure/ml/ootd_service.py:E402
+    run_tryon_job.py:E402

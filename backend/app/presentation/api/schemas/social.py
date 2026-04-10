@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 from app.application.dto.social_dto import LikeBase, LikeCreate
 
+__all__ = ["LikeBase", "LikeCreate", "LikeResponse", "LikeStats"]
+
 
 class LikeResponse(LikeBase):
     id: int

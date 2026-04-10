@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 

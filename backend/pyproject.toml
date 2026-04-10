@@ -69,6 +69,8 @@ files = [
   "run_server.py",
   "run_migrations.py",
   "run_tryon_worker.py",
+  "run_tryon_job.py",
+  "batch/swipeit_daily_metrics_job.py",
 ]
 ignore_missing_imports = true
 follow_imports = "skip"

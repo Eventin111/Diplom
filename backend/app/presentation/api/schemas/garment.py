@@ -4,6 +4,8 @@ from typing import Any, Dict, Optional
 from app.application.dto.garment_dto import GarmentBase, GarmentCreate, GarmentUpdate
 from app.presentation.api.schemas.media import MediaResponse
 
+__all__ = ["GarmentBase", "GarmentCreate", "GarmentUpdate", "GarmentResponse", "GarmentWithTryOnInfo"]
+
 
 class GarmentResponse(GarmentBase):
     id: int

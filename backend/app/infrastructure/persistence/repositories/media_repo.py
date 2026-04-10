@@ -5,7 +5,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dto.media_dto import MediaCreate, MediaType
-from app.core.config import settings
 from app.core.image_processor import ImageProcessor
 from app.infrastructure.persistence.models.media import MediaAsset
 from app.infrastructure.storage.local_media import build_local_media_path
@@ -66,9 +65,7 @@ class MediaRepository(BaseRepository[MediaAsset]):
         # Затем пробуем загрузить в S3 (если доступен)
         try:
             if hasattr(s3_client, "client") and s3_client.client is not None:
-                public_url = await s3_client.upload_file(
-                    file_content=file_content, file_key=file_key, content_type=content_type
-                )
+                await s3_client.upload_file(file_content=file_content, file_key=file_key, content_type=content_type)
                 logger.info(f"Файл загружен в S3: {file_key}")
             else:
                 logger.warning("S3 клиент не доступен, создаем запись без S3")

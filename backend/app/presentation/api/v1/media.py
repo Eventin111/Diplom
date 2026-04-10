@@ -11,9 +11,9 @@ from app.core.config import settings
 from app.infrastructure.auth.security import get_current_user
 from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.media_repo import MediaRepository
-from app.infrastructure.storage.local_media import build_local_media_path, ensure_local_media_dir
+from app.infrastructure.storage.local_media import build_local_media_path
 from app.infrastructure.storage.s3 import s3_client
-from app.presentation.api.schemas.media import MediaCreate, MediaResponse, MediaType, MediaUploadResponse
+from app.presentation.api.schemas.media import MediaResponse, MediaType, MediaUploadResponse
 from app.presentation.api.schemas.user import UserResponse
 
 router = APIRouter()
@@ -141,7 +141,7 @@ async def get_media(media_id: int, db: AsyncSession = Depends(get_db)):
 
     try:
         media_repo = MediaRepository()
-        logger.info(f"Создан MediaRepository")
+        logger.info("Создан MediaRepository")
 
         media = await media_repo.get(db, media_id)
         logger.info(f"Результат media_repo.get: {media}")

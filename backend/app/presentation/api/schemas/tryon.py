@@ -6,6 +6,15 @@ from pydantic import BaseModel
 from app.application.dto.tryon_session_dto import TryOnSessionBase, TryOnSessionCreate, TryOnSessionUpdate
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 
+__all__ = [
+    "TryOnSessionBase",
+    "TryOnSessionCreate",
+    "TryOnSessionUpdate",
+    "TryOnSessionResponse",
+    "TryOnResult",
+    "TryOnEventResponse",
+]
+
 
 class TryOnSessionResponse(TryOnSessionBase):
     id: int

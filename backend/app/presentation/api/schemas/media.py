@@ -5,6 +5,8 @@ from pydantic import BaseModel, validator
 
 from app.application.dto.media_dto import MediaBase, MediaCreate, MediaType, MediaUpdate
 
+__all__ = ["MediaBase", "MediaCreate", "MediaType", "MediaUpdate", "MediaResponse", "MediaUploadResponse"]
+
 
 class MediaResponse(MediaBase):
     id: int

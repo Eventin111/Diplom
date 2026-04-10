@@ -216,7 +216,6 @@ async def get_tryon_session(
     db: AsyncSession = Depends(get_db),
 ):
     tryon_repo = TryOnRepository()
-    tryon_event_repo = TryOnEventRepository()
     session = await tryon_repo.get(db, session_id)
 
     if session is None or session.user_id != current_user.id:

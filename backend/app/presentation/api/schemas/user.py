@@ -5,6 +5,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.application.dto.user_dto import UserBase, UserCreate, UserUpdate
 
+__all__ = ["UserBase", "UserCreate", "UserUpdate", "UserResponse", "UserWithStatsResponse", "UserLogin", "Token"]
+
 
 class UserResponse(UserBase):
     id: int

@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.auth.security import get_current_user
 from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.garment_repo import GarmentRepository
-from app.presentation.api.schemas.garment import GarmentCreate, GarmentResponse, GarmentUpdate
+from app.presentation.api.schemas.garment import GarmentCreate, GarmentResponse
 from app.presentation.api.schemas.user import UserResponse
 
 router = APIRouter()
