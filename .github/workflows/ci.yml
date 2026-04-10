@@ -53,6 +53,29 @@ jobs:
       - name: Run mypy
         run: uv run mypy
 
+  airflow-smoke:
+    name: Airflow Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start Airflow stack
+        env:
+          AIRFLOW_ADMIN_PASSWORD: ci-admin-password
+        run: |
+          docker compose -f batch/airflow/docker-compose.airflow.yml up -d airflow-init airflow-webserver airflow-scheduler
+
+      - name: Verify Airflow DAG is loaded
+        run: |
+          docker compose -f batch/airflow/docker-compose.airflow.yml exec -T airflow-webserver airflow dags list
+          docker compose -f batch/airflow/docker-compose.airflow.yml exec -T airflow-webserver airflow dags list | grep -q "swipeit_daily_metrics"
+
+      - name: Stop Airflow stack
+        if: always()
+        run: |
+          docker compose -f batch/airflow/docker-compose.airflow.yml down -v
+
   ml-lint:
     name: ML Linters
     runs-on: ubuntu-latest
