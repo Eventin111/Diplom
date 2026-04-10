@@ -3,12 +3,7 @@ import unittest
 import numpy as np
 from PIL import Image
 
-from swipeit_ml.application.services.masking import (
-    extend_arm_mask,
-    get_mask_location,
-    hole_fill,
-    refine_mask,
-)
+from swipeit_ml.application.services.masking import extend_arm_mask, get_mask_location, hole_fill, refine_mask
 
 
 class TestUtilsOOTD(unittest.TestCase):

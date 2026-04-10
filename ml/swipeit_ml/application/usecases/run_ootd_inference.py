@@ -7,7 +7,13 @@ from PIL import Image
 from swipeit_ml.application.ports import DiffusionPort, OpenPosePort, ParsingPort
 from swipeit_ml.application.services.masking import get_mask_location
 from swipeit_ml.domain.entities import InferenceRequest, InferenceResult
-from swipeit_ml.domain.enums import CATEGORY_TO_MASK_CATEGORY, GarmentCategory, ModelType, coerce_category, coerce_model_type
+from swipeit_ml.domain.enums import (
+    CATEGORY_TO_MASK_CATEGORY,
+    GarmentCategory,
+    ModelType,
+    coerce_category,
+    coerce_model_type,
+)
 
 
 class RunOOTDInference:
@@ -63,7 +69,12 @@ class RunOOTDInference:
         t_gen = time.perf_counter()
 
         print(
-            f"[OOTD Timing] load={t_load - t0:.2f}s preprocess={t_pre - t_load:.2f}s diffusion={t_gen - t_pre:.2f}s total={t_gen - t0:.2f}s"
+            (
+                f"[OOTD Timing] load={t_load - t0:.2f}s "
+                f"preprocess={t_pre - t_load:.2f}s "
+                f"diffusion={t_gen - t_pre:.2f}s "
+                f"total={t_gen - t0:.2f}s"
+            )
         )
 
         return InferenceResult(outputs=outputs, masked_vton=masked_vton_img, mask=mask)

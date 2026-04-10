@@ -34,4 +34,3 @@ class DiffusionPort(ABC):
         seed: int,
     ) -> list[Image.Image]:
         """Generate output images from the configured diffusion model."""
-

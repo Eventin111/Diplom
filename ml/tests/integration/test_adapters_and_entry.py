@@ -1,4 +1,3 @@
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -76,9 +75,20 @@ class TestAdaptersAndEntrypoint(unittest.TestCase):
     def test_adapters_use_underlying_impl(self):
         from swipeit_ml.infrastructure.adapters import DiffusionAdapter, OpenPoseAdapter, ParsingAdapter
 
-        with patch("swipeit_ml.infrastructure.adapters.openpose_adapter.OpenPose", DummyOpenPoseImpl), patch(
-            "swipeit_ml.infrastructure.adapters.parsing_adapter.Parsing", DummyParsingImpl
-        ), patch("swipeit_ml.infrastructure.adapters.diffusion_adapter.OOTDiffusion", DummyDiffusionImpl):
+        with (
+            patch(
+                "swipeit_ml.infrastructure.adapters.openpose_adapter.OpenPose",
+                DummyOpenPoseImpl,
+            ),
+            patch(
+                "swipeit_ml.infrastructure.adapters.parsing_adapter.Parsing",
+                DummyParsingImpl,
+            ),
+            patch(
+                "swipeit_ml.infrastructure.adapters.diffusion_adapter.OOTDiffusion",
+                DummyDiffusionImpl,
+            ),
+        ):
             openpose = OpenPoseAdapter(gpu_id=0)
             parsing = ParsingAdapter(gpu_id=0)
             diffusion = DiffusionAdapter(gpu_id=0, model_type="hd")
@@ -109,27 +119,40 @@ class TestAdaptersAndEntrypoint(unittest.TestCase):
             Image.new("RGB", (768, 1024), "black").save(model_path)
             Image.new("RGB", (768, 1024), "black").save(cloth_path)
 
-            with patch("swipeit_ml.presentation.cli.OpenPoseAdapter", lambda gpu_id: DummyOpenPoseImpl(gpu_id)), patch(
-                "swipeit_ml.presentation.cli.ParsingAdapter", lambda gpu_id: DummyParsingImpl(gpu_id)
-            ), patch(
-                "swipeit_ml.presentation.cli.DiffusionAdapter",
-                lambda gpu_id, model_type: DummyDiffusionAdapter(gpu_id, model_type),
-            ), patch(
-                "swipeit_ml.application.usecases.run_ootd_inference.get_mask_location",
-                lambda *_args, **_kwargs: (Image.new("L", (768, 1024)), Image.new("L", (768, 1024))),
-            ), patch(
-                "sys.argv",
-                [
-                    "cli.py",
-                    "--model_path",
-                    model_path,
-                    "--cloth_path",
-                    cloth_path,
-                    "--model_type",
-                    "hd",
-                    "--category",
-                    "0",
-                ],
+            with (
+                patch(
+                    "swipeit_ml.presentation.cli.OpenPoseAdapter",
+                    lambda gpu_id: DummyOpenPoseImpl(gpu_id),
+                ),
+                patch(
+                    "swipeit_ml.presentation.cli.ParsingAdapter",
+                    lambda gpu_id: DummyParsingImpl(gpu_id),
+                ),
+                patch(
+                    "swipeit_ml.presentation.cli.DiffusionAdapter",
+                    lambda gpu_id, model_type: DummyDiffusionAdapter(gpu_id, model_type),
+                ),
+                patch(
+                    "swipeit_ml.application.usecases.run_ootd_inference.get_mask_location",
+                    lambda *_args, **_kwargs: (
+                        Image.new("L", (768, 1024)),
+                        Image.new("L", (768, 1024)),
+                    ),
+                ),
+                patch(
+                    "sys.argv",
+                    [
+                        "cli.py",
+                        "--model_path",
+                        model_path,
+                        "--cloth_path",
+                        cloth_path,
+                        "--model_type",
+                        "hd",
+                        "--category",
+                        "0",
+                    ],
+                ),
             ):
                 cli.main()
 

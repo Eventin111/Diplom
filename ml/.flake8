@@ -1,0 +1,11 @@
+[flake8]
+max-line-length = 120
+extend-ignore = E203, W503
+exclude =
+    .pytest_cache,
+    __pycache__,
+    third_party
+per-file-ignores =
+    swipeit_ml/application/usecases/__init__.py:F401
+    swipeit_ml/presentation/cli.py:E402
+    swipeit_ml/presentation/gradio_demo.py:E402

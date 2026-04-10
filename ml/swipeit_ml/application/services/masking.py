@@ -1,7 +1,6 @@
-import numpy as np
 import cv2
+import numpy as np
 from PIL import Image, ImageDraw
-
 
 label_map = {
     "background": 0,
@@ -59,7 +58,14 @@ def refine_mask(mask):
     return refined
 
 
-def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: dict, width=384, height=512):
+def get_mask_location(
+    model_type,
+    category,
+    model_parse: Image.Image,
+    keypoint: dict,
+    width=384,
+    height=512,
+):
     im_parse = model_parse.resize((width, height), Image.NEAREST)
     parse_array = np.array(im_parse)
 
@@ -99,10 +105,9 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
         parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
     elif category == "upper_body":
         parse_mask = (parse_array == 4).astype(np.float32) + (parse_array == 7).astype(np.float32)
-        parser_mask_fixed_lower_cloth = (
-            (parse_array == label_map["skirt"]).astype(np.float32)
-            + (parse_array == label_map["pants"]).astype(np.float32)
-        )
+        parser_mask_fixed_lower_cloth = (parse_array == label_map["skirt"]).astype(np.float32) + (
+            parse_array == label_map["pants"]
+        ).astype(np.float32)
         parser_mask_fixed += parser_mask_fixed_lower_cloth
         parser_mask_changeable += np.logical_and(parse_array, np.logical_not(parser_mask_fixed))
     elif category == "lower_body":
@@ -202,4 +207,3 @@ def get_mask_location(model_type, category, model_parse: Image.Image, keypoint: 
     mask_gray = Image.fromarray(inpaint_mask.astype(np.uint8) * 127)
 
     return mask, mask_gray
-
