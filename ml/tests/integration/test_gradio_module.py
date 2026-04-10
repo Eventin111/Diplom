@@ -33,7 +33,7 @@ class TestGradioModuleImport(unittest.TestCase):
         # Reload in case it was already imported by earlier tests.
         if "swipeit_ml.presentation.gradio_demo" in sys.modules:
             del sys.modules["swipeit_ml.presentation.gradio_demo"]
-        import swipeit_ml.presentation.gradio_demo as gradio_mod  # noqa: F401
+        import swipeit_ml.presentation.gradio_demo as gradio_mod
 
         # Clean up sys.path addition to avoid affecting other tests
         sys.path.remove(ml_root)
