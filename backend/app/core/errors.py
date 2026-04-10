@@ -1,48 +1,37 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from pydantic import ValidationError
 import logging
 import traceback
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
 logger = logging.getLogger(__name__)
+
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Обработчик ошибок валидации Pydantic"""
     errors = []
     for error in exc.errors():
-        field = " -> ".join(str(loc) for loc in error['loc'])
-        errors.append({
-            "field": field,
-            "message": error['msg'],
-            "type": error['type']
-        })
-    
+        field = " -> ".join(str(loc) for loc in error["loc"])
+        errors.append({"field": field, "message": error["msg"], "type": error["type"]})
+
     logger.warning(f"Ошибка валидации: {errors}")
-    
-    return JSONResponse(
-        status_code=422,
-        content={
-            "detail": "Ошибка валидации данных",
-            "errors": errors
-        }
-    )
+
+    return JSONResponse(status_code=422, content={"detail": "Ошибка валидации данных", "errors": errors})
+
 
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Обработчик HTTP исключений"""
     logger.warning(f"HTTP ошибка {exc.status_code}: {exc.detail}")
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 async def global_exception_handler(request: Request, exc: Exception):
     """Глобальный обработчик исключений"""
     logger.error(f"Необработанное исключение: {str(exc)}\n{traceback.format_exc()}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Внутренняя ошибка сервера"}
-    )
+    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера"})
+
 
 def setup_exception_handlers(app: FastAPI):
     """Настройка обработчиков исключений"""

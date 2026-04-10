@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
-from app.application.dto.user_dto import UserCreate, UserUpdate, UserBase
+from app.application.dto.user_dto import UserBase, UserCreate, UserUpdate
 
 
 class UserResponse(UserBase):

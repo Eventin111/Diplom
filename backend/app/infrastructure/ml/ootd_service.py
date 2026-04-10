@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PIL import Image
+
 from app.core.config import settings
 
 # Добавляем путь к ML коду
@@ -30,7 +31,7 @@ class OOTDService:
     Сервис для виртуальной примерки одежды.
     Infrastructure слой - реализация взаимодействия с ML моделью.
     """
-    
+
     def __init__(self, gpu_id: int = 0):
         self.gpu_id = gpu_id
         self._openpose = None
@@ -52,7 +53,7 @@ class OOTDService:
                 "CUDA is unavailable in try-on worker. "
                 "Run tryon-worker with GPU access (NVIDIA runtime / gpus: all)."
             )
-    
+
     def _ensure_initialized(self):
         """Ленивая инициализация компонентов модели."""
         self._assert_cuda_ready()
@@ -61,7 +62,7 @@ class OOTDService:
             self._parsing = ParsingAdapter(self.gpu_id)
             self._diffusion = DiffusionAdapter(self.gpu_id, ModelType.HD)
             self._runner = RunOOTDInference(self._openpose, self._parsing, self._diffusion)
-    
+
     def try_on(
         self,
         model_image: Image.Image,
@@ -75,7 +76,7 @@ class OOTDService:
     ) -> list[Image.Image]:
         """
         Запуск виртуальной примерки.
-        
+
         Args:
             model_image: PIL Image с фото человека
             cloth_image: PIL Image с фото одежды
@@ -85,7 +86,7 @@ class OOTDService:
             num_steps: количество шагов инференса
             num_samples: количество сэмплов
             seed: seed для воспроизводимости
-            
+
         Returns:
             Список сгенерированных изображений
         """
@@ -93,15 +94,16 @@ class OOTDService:
             raise ValueError("model_type 'hd' requires category == 0")
 
         self._ensure_initialized()
-        
+
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "model.jpg"
             cloth_path = Path(tmpdir) / "cloth.jpg"
-            
+
             model_image.save(model_path)
             cloth_image.save(cloth_path)
-            
+
             request = InferenceRequest(
                 gpu_id=self.gpu_id,
                 model_type=ModelType(model_type),
@@ -113,14 +115,15 @@ class OOTDService:
                 num_samples=num_samples,
                 seed=seed,
             )
-            
+
             result = self._runner.execute(request)
             return result.outputs
-    
+
     def health_check(self) -> dict:
         """Проверка готовности сервиса."""
         try:
             import torch
+
             cuda_available = torch.cuda.is_available()
             gpu_name = torch.cuda.get_device_name(self.gpu_id) if cuda_available else None
         except Exception:

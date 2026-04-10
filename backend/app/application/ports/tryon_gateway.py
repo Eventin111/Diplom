@@ -19,4 +19,3 @@ class TryOnGateway(Protocol):
         seed: int,
     ) -> list[Image.Image]:
         """Run the try-on inference and return generated images."""
-

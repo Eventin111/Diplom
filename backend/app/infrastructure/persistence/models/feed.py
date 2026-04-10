@@ -1,7 +1,9 @@
-from sqlalchemy import Integer, String, Column, ForeignKey, Text
+from sqlalchemy import Column, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.infrastructure.db.db import Base
 from app.infrastructure.persistence.models.mixins import TimestampMixin
+
 
 class FeedItem(Base, TimestampMixin):
     __tablename__ = "feed_items"

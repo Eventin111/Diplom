@@ -17,4 +17,3 @@ project_config_module = _load_project_config_module()
 Settings = project_config_module.BackendSettings
 project_config = project_config_module.load_project_config()
 settings = project_config.backend
-

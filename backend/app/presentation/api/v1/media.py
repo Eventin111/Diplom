@@ -1,18 +1,18 @@
+import logging
+import os
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-import uuid
-import os
-import logging
 
-from app.infrastructure.auth.security import get_current_user
 from app.core.config import settings
+from app.infrastructure.auth.security import get_current_user
 from app.infrastructure.db.db import get_db
+from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.infrastructure.storage.local_media import build_local_media_path, ensure_local_media_dir
 from app.infrastructure.storage.s3 import s3_client
-from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.presentation.api.schemas.media import MediaCreate, MediaResponse, MediaType, MediaUploadResponse
 from app.presentation.api.schemas.user import UserResponse
 
@@ -54,34 +54,35 @@ def is_tryon_media_asset(storage_key: str | None) -> bool:
     key = str(storage_key or "").lower()
     return "/tryon/" in key or "\\tryon\\" in key
 
+
 @router.post("/upload", response_model=MediaUploadResponse)
 async def upload_media(
     file: UploadFile = File(...),
     current_user: UserResponse = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Загрузка медиа файла (работает с S3 и без S3)"""
-    
+
     # Проверяем тип файла
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Неподдерживаемый тип файла. Разрешены: {', '.join(ALLOWED_CONTENT_TYPES.keys())}"
+            detail=f"Неподдерживаемый тип файла. Разрешены: {', '.join(ALLOWED_CONTENT_TYPES.keys())}",
         )
-    
+
     # Генерируем уникальное имя файла
     file_extension = os.path.splitext(file.filename)[1]
     unique_filename = f"user_{current_user.id}/{uuid.uuid4()}{file_extension}"
-    
+
     # Читаем содержимое файла
     file_content = await file.read()
     local_file_path = build_local_media_path(unique_filename)
     local_file_path.parent.mkdir(parents=True, exist_ok=True)
     local_file_path.write_bytes(file_content)
-    
+
     # Определяем тип медиа
     media_type = ALLOWED_CONTENT_TYPES[file.content_type]
-    
+
     # Создаем медиа запись
     media_repo = MediaRepository()
     try:
@@ -92,31 +93,25 @@ async def upload_media(
             file_key=unique_filename,
             kind=media_type,
             owner_user_id=current_user.id,
-            content_type=file.content_type
+            content_type=file.content_type,
         )
-        
+
         # Формируем URL для ответа
         upload_url = f"{settings.API_V1}/media/{media.id}/file"
-        
+
         logger.info(f"Файл загружен: {unique_filename}")
-        
-        return MediaUploadResponse(
-            media=media,
-            upload_url=upload_url
-        )
-        
+
+        return MediaUploadResponse(media=media, upload_url=upload_url)
+
     except Exception as e:
         logger.error(f"Ошибка загрузки файла: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка загрузки файла: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка загрузки файла: {str(e)}"
         )
 
+
 @router.get("/mine", response_model=list[MediaResponse])
-async def list_my_media(
-    current_user: UserResponse = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
+async def list_my_media(current_user: UserResponse = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Вернуть профильные медиа текущего пользователя, исключая аватар и try-on артефакты."""
     media_repo = MediaRepository()
     user_media = await media_repo.get_by_owner(db, current_user.id)
@@ -128,39 +123,39 @@ async def list_my_media(
             continue
         media_response = serialize_media(media)
         media_public_url = str(media_response.public_url or "")
-        if avatar_url and media_public_url and (
-            avatar_url == media_public_url or avatar_url.endswith(media_public_url)
+        if (
+            avatar_url
+            and media_public_url
+            and (avatar_url == media_public_url or avatar_url.endswith(media_public_url))
         ):
             continue
         items.append(media_response)
 
     return items
 
+
 @router.get("/{media_id}", response_model=MediaResponse)
-async def get_media(
-    media_id: int,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_media(media_id: int, db: AsyncSession = Depends(get_db)):
     """Получить информацию о медиа"""
     logger.info(f"GET /media/{media_id} вызван")
-    
+
     try:
         media_repo = MediaRepository()
         logger.info(f"Создан MediaRepository")
-        
+
         media = await media_repo.get(db, media_id)
         logger.info(f"Результат media_repo.get: {media}")
-        
+
         if not media:
             logger.warning(f"Медиа {media_id} не найдено")
             raise HTTPException(status_code=404, detail="Медиа не найдено")
-        
+
         logger.info(f"Медиа найдено: id={media.id}, storage_key={media.storage_key}")
-        
+
         response = serialize_media(media)
         logger.info(f"Возвращаем ответ: {response}")
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -169,10 +164,7 @@ async def get_media(
 
 
 @router.get("/{media_id}/file")
-async def get_media_file(
-    media_id: int,
-    db: AsyncSession = Depends(get_db)
-):
+async def get_media_file(media_id: int, db: AsyncSession = Depends(get_db)):
     """Отдать файл медиа через backend, даже если MinIO приватный."""
     media_repo = MediaRepository()
     media = await media_repo.get(db, media_id)
@@ -195,19 +187,14 @@ async def get_media_file(
 
         file_bytes, content_type = s3_client.get_file(media.storage_key)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка чтения файла: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка чтения файла: {str(e)}")
 
     return Response(content=file_bytes, media_type=content_type)
 
 
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_media(
-    media_id: int,
-    current_user: UserResponse = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    media_id: int, current_user: UserResponse = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Удалить медиа текущего пользователя."""
     media_repo = MediaRepository()

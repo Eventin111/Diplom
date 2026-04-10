@@ -84,9 +84,7 @@ def _parse_statuses_csv(raw: str) -> tuple[str, ...]:
 
 
 async def _ensure_target_table(conn) -> None:
-    await conn.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext('daily_project_metrics_table_lock'));")
-    )
+    await conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('daily_project_metrics_table_lock'));"))
     await conn.execute(
         text(
             """

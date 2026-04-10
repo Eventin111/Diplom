@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 LOCAL_MEDIA_ROOT = BACKEND_ROOT / "local_media"
 LEGACY_LOCAL_MEDIA_ROOT = BACKEND_ROOT / "backend" / "local_media"

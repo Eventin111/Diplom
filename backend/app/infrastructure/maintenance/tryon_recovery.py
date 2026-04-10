@@ -8,12 +8,7 @@ from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 from app.infrastructure.db.db import AsyncSessionLocal
 from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
-from app.infrastructure.queue.tryon_queue import (
-    enqueue_tryon_task,
-    get_tryon_task_snapshot,
-    has_tryon_processing_lock,
-)
-
+from app.infrastructure.queue.tryon_queue import enqueue_tryon_task, get_tryon_task_snapshot, has_tryon_processing_lock
 
 _last_recovery_run_at = 0.0
 
@@ -75,4 +70,3 @@ async def maybe_run_periodic_tryon_recovery() -> dict[str, object]:
 
     _last_recovery_run_at = now
     return await run_tryon_recovery(force=False)
-

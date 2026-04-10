@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums.tryon import TryOnEventType
 from app.infrastructure.persistence.models.tryon_event import TryOnEvent
+
 from .base import BaseRepository
 
 
@@ -35,9 +36,7 @@ class TryOnEventRepository(BaseRepository[TryOnEvent]):
 
     async def get_recent_events(self, db: AsyncSession, limit: int = 10) -> List[dict[str, Any]]:
         result = await db.execute(
-            select(TryOnEvent)
-            .order_by(TryOnEvent.created_at.desc(), TryOnEvent.id.desc())
-            .limit(limit)
+            select(TryOnEvent).order_by(TryOnEvent.created_at.desc(), TryOnEvent.id.desc()).limit(limit)
         )
         events = result.scalars().all()
         return [
@@ -57,8 +56,6 @@ class TryOnEventRepository(BaseRepository[TryOnEvent]):
         if not session_ids:
             return 0
 
-        result = await db.execute(
-            delete(TryOnEvent).where(TryOnEvent.session_id.in_(session_ids))
-        )
+        result = await db.execute(delete(TryOnEvent).where(TryOnEvent.session_id.in_(session_ids)))
         await db.commit()
         return int(result.rowcount or 0)

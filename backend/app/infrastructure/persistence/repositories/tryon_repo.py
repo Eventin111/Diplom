@@ -1,14 +1,17 @@
 from datetime import datetime
+from typing import Any, List, Optional
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, List, Optional
+
+from app.application.dto.tryon_session_dto import TryOnSessionCreate
 from app.domain.enums.tryon import TryOnStatus
 from app.infrastructure.persistence.models.tryon import TryOnSession
-from app.application.dto.tryon_session_dto import TryOnSessionCreate
+
 from .base import BaseRepository
 
 _UNSET = object()
+
 
 class TryOnRepository(BaseRepository[TryOnSession]):
     def __init__(self):
@@ -27,7 +30,9 @@ class TryOnRepository(BaseRepository[TryOnSession]):
         await db.refresh(db_obj)
         return db_obj
 
-    async def get_user_sessions(self, db: AsyncSession, user_id: int, skip: int = 0, limit: int = 50) -> List[TryOnSession]:
+    async def get_user_sessions(
+        self, db: AsyncSession, user_id: int, skip: int = 0, limit: int = 50
+    ) -> List[TryOnSession]:
         result = await db.execute(
             select(TryOnSession)
             .where(TryOnSession.user_id == user_id)
@@ -38,9 +43,9 @@ class TryOnRepository(BaseRepository[TryOnSession]):
         return result.scalars().all()
 
     async def update_status(
-        self, 
-        db: AsyncSession, 
-        session_id: int, 
+        self,
+        db: AsyncSession,
+        session_id: int,
         status: TryOnStatus,
         result_media_id: Optional[int] | object = _UNSET,
         error_text: Optional[str] | object = _UNSET,
@@ -67,8 +72,7 @@ class TryOnRepository(BaseRepository[TryOnSession]):
 
     async def get_status_counts(self, db: AsyncSession) -> dict[str, int]:
         result = await db.execute(
-            select(TryOnSession.status, func.count(TryOnSession.id))
-            .group_by(TryOnSession.status)
+            select(TryOnSession.status, func.count(TryOnSession.id)).group_by(TryOnSession.status)
         )
         counts = {status.value: 0 for status in TryOnStatus}
         for status_value, count in result.all():
@@ -133,8 +137,6 @@ class TryOnRepository(BaseRepository[TryOnSession]):
         if not session_ids:
             return 0
 
-        result = await db.execute(
-            delete(TryOnSession).where(TryOnSession.id.in_(session_ids))
-        )
+        result = await db.execute(delete(TryOnSession).where(TryOnSession.id.in_(session_ids)))
         await db.commit()
         return int(result.rowcount or 0)

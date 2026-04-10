@@ -1,7 +1,9 @@
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.infrastructure.db.db import Base
 from app.infrastructure.persistence.models.mixins import TimestampMixin
+
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"

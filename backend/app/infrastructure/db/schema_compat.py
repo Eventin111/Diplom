@@ -66,9 +66,5 @@ async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
                 """
             )
         )
-        await conn.execute(
-            text("CREATE INDEX IF NOT EXISTS ix_tryon_events_session_id ON tryon_events (session_id)")
-        )
-        await conn.execute(
-            text("CREATE INDEX IF NOT EXISTS ix_tryon_events_event_type ON tryon_events (event_type)")
-        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tryon_events_session_id ON tryon_events (session_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tryon_events_event_type ON tryon_events (event_type)"))

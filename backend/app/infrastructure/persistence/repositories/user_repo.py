@@ -1,10 +1,14 @@
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from app.infrastructure.persistence.models.user import User
+
 from app.application.dto.user_dto import UserCreate, UserUpdate
-from .base import BaseRepository
 from app.core.hashing import hash_password, verify_password
+from app.infrastructure.persistence.models.user import User
+
+from .base import BaseRepository
+
 
 class UserRepository(BaseRepository[User]):
     def __init__(self):
@@ -48,30 +52,21 @@ class UserRepository(BaseRepository[User]):
 
     async def get_with_stats(self, db: AsyncSession, user_id: int) -> Optional[dict]:
         from sqlalchemy import func, select
+
         from app.infrastructure.persistence.models.feed import FeedItem
         from app.infrastructure.persistence.models.likes import Like
-        
+
         # Базовые данные пользователя
         user = await self.get(db, user_id)
         if not user:
             return None
-        
+
         # Статистика постов
-        posts_count_result = await db.execute(
-            select(func.count(FeedItem.id)).where(FeedItem.user_id == user_id)
-        )
+        posts_count_result = await db.execute(select(func.count(FeedItem.id)).where(FeedItem.user_id == user_id))
         posts_count = posts_count_result.scalar()
-        
+
         # Статистика лайков
-        likes_count_result = await db.execute(
-            select(func.count(Like.id)).where(Like.user_id == user_id)
-        )
+        likes_count_result = await db.execute(select(func.count(Like.id)).where(Like.user_id == user_id))
         likes_count = likes_count_result.scalar()
-        
-        return {
-            "user": user,
-            "stats": {
-                "posts_count": posts_count or 0,
-                "likes_count": likes_count or 0
-            }
-        }
+
+        return {"user": user, "stats": {"posts_count": posts_count or 0, "likes_count": likes_count or 0}}

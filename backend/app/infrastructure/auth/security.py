@@ -9,7 +9,6 @@ from app.core.config import settings
 from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.user_repo import UserRepository
 
-
 oauth = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1}/auth/login")
 oauth_optional = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1}/auth/login", auto_error=False)
 

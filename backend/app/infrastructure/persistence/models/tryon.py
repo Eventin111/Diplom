@@ -1,7 +1,9 @@
-from sqlalchemy import Integer, Column, ForeignKey, String
+from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.infrastructure.db.db import Base
 from app.infrastructure.persistence.models.mixins import TimestampMixin
+
 
 class TryOnSession(Base, TimestampMixin):
     __tablename__ = "tryon_sessions"

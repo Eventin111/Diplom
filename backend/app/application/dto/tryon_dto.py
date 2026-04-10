@@ -13,6 +13,7 @@ class TryOnRequest:
     """
     DTO для запроса на виртуальную примерку.
     """
+
     model_image: Image.Image
     cloth_image: Image.Image
     model_type: str = "hd"
@@ -28,6 +29,7 @@ class TryOnResponse:
     """
     DTO для ответа виртуальной примерки.
     """
+
     success: bool
     results: list[str]  # URLs или base64
     count: int

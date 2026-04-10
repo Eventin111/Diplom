@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, validator
 
-from app.application.dto.media_dto import MediaCreate, MediaType, MediaBase, MediaUpdate
+from app.application.dto.media_dto import MediaBase, MediaCreate, MediaType, MediaUpdate
 
 
 class MediaResponse(MediaBase):

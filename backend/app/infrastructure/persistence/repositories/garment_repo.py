@@ -1,9 +1,13 @@
+from typing import List, Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from app.infrastructure.persistence.models.garment import Garment
+
 from app.application.dto.garment_dto import GarmentCreate, GarmentUpdate
+from app.infrastructure.persistence.models.garment import Garment
+
 from .base import BaseRepository
+
 
 class GarmentRepository(BaseRepository[Garment]):
     def __init__(self):
@@ -23,11 +27,11 @@ class GarmentRepository(BaseRepository[Garment]):
 
     async def update(self, db: AsyncSession, *, db_obj: Garment, obj_in: GarmentUpdate) -> Garment:
         update_data = obj_in.dict(exclude_unset=True)
-        
+
         for field, value in update_data.items():
             if value is not None:  # Обновляем только если значение не None
                 setattr(db_obj, field, value)
-        
+
         await db.commit()
         await db.refresh(db_obj)
         return db_obj
@@ -42,10 +46,5 @@ class GarmentRepository(BaseRepository[Garment]):
         return result.scalars().all()
 
     async def get_by_brand(self, db: AsyncSession, brand: str, skip: int = 0, limit: int = 50) -> List[Garment]:
-        result = await db.execute(
-            select(Garment)
-            .where(Garment.brand == brand)
-            .offset(skip)
-            .limit(limit)
-        )
+        result = await db.execute(select(Garment).where(Garment.brand == brand).offset(skip).limit(limit))
         return result.scalars().all()

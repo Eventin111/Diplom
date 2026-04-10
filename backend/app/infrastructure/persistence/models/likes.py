@@ -1,7 +1,9 @@
-from sqlalchemy import Integer, Column, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.infrastructure.db.db import Base
 from app.infrastructure.persistence.models.mixins import TimestampMixin
+
 
 class Like(Base, TimestampMixin):
     __tablename__ = "likes"

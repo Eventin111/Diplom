@@ -8,11 +8,7 @@ from app.infrastructure.db.db import AsyncSessionLocal
 from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
-from app.infrastructure.queue.tryon_queue import (
-    delete_tryon_runtime_artifacts,
-    trim_tryon_dead_letter_queue,
-)
-
+from app.infrastructure.queue.tryon_queue import delete_tryon_runtime_artifacts, trim_tryon_dead_letter_queue
 
 _last_cleanup_run_at = 0.0
 
@@ -86,4 +82,3 @@ async def maybe_run_periodic_tryon_cleanup() -> dict[str, int | bool]:
 
     _last_cleanup_run_at = now
     return await run_tryon_cleanup(force=False)
-

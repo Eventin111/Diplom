@@ -9,7 +9,6 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for partial environme
 
 from app.core.config import settings
 
-
 _redis_client: Optional[Redis] = None
 
 

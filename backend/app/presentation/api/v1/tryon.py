@@ -3,6 +3,7 @@ API эндпоинты для виртуальной примерки одежд
 Presentation Layer: создание сессий, постановка задач в очередь и опрос статуса.
 """
 
+import asyncio
 import os
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.dto.media_dto import MediaType
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
@@ -19,6 +21,10 @@ from app.infrastructure.cache.tryon_rate_limit import enforce_tryon_rate_limit
 from app.infrastructure.db.db import AsyncSessionLocal, get_db
 from app.infrastructure.maintenance.tryon_cleanup import run_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import run_tryon_recovery
+from app.infrastructure.ml.ootd_service import get_ootd_service
+from app.infrastructure.persistence.repositories.media_repo import MediaRepository
+from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
+from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (
     build_tryon_task_payload,
     enqueue_tryon_task,
@@ -29,14 +35,8 @@ from app.infrastructure.queue.tryon_queue import (
     request_tryon_cancellation,
     requeue_tryon_dead_letter,
 )
-from app.infrastructure.ml.ootd_service import get_ootd_service
-from app.infrastructure.persistence.repositories.media_repo import MediaRepository
-from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
-from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
-from app.application.dto.media_dto import MediaType
 from app.presentation.api.schemas.tryon import TryOnResult, TryOnSessionCreate, TryOnSessionResponse
 from app.presentation.api.schemas.user import UserResponse
-import asyncio
 
 router = APIRouter()
 

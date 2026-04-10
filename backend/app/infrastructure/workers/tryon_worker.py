@@ -204,7 +204,10 @@ async def _execute_tryon_job(
             encoding="utf-8",
         )
 
-        with stdout_path.open("w", encoding="utf-8") as stdout_file, stderr_path.open("w", encoding="utf-8") as stderr_file:
+        with (
+            stdout_path.open("w", encoding="utf-8") as stdout_file,
+            stderr_path.open("w", encoding="utf-8") as stderr_file,
+        ):
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
                 str(TRYON_JOB_RUNNER),
@@ -219,7 +222,9 @@ async def _execute_tryon_job(
             try:
                 while True:
                     if await is_tryon_cancellation_requested(session_id):
-                        logger.info("Cancellation requested for try-on session %s, terminating pid=%s", session_id, process.pid)
+                        logger.info(
+                            "Cancellation requested for try-on session %s, terminating pid=%s", session_id, process.pid
+                        )
                         await _terminate_process(process)
                         raise TryOnCancelledError("Try-on canceled by user")
 

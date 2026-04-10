@@ -3,11 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.application.dto.tryon_session_dto import (
-    TryOnSessionBase,
-    TryOnSessionCreate,
-    TryOnSessionUpdate,
-)
+from app.application.dto.tryon_session_dto import TryOnSessionBase, TryOnSessionCreate, TryOnSessionUpdate
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 
 
