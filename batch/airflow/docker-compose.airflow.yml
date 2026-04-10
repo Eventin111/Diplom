@@ -7,7 +7,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-docker==3.11.0}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS-}
       AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
       AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?Set AIRFLOW_ADMIN_PASSWORD in your environment or .env file}
       AIRFLOW_ADMIN_FIRSTNAME: ${AIRFLOW_ADMIN_FIRSTNAME:-Air}
@@ -44,7 +44,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
-      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-docker==3.11.0}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS-}
       AIRFLOW__SECRETS__BACKEND: airflow.secrets.environment_variables.EnvironmentVariablesBackend
       SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
       SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
@@ -78,7 +78,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS:-apache-airflow-providers-docker==3.11.0}
+      _PIP_ADDITIONAL_REQUIREMENTS: ${AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS-}
       AIRFLOW__SECRETS__BACKEND: airflow.secrets.environment_variables.EnvironmentVariablesBackend
       SWIPEIT_BATCH_IMAGE: ${SWIPEIT_BATCH_IMAGE:-swipeit-batch:latest}
       SWIPEIT_DOCKER_NETWORK: ${SWIPEIT_DOCKER_NETWORK:-diplom_default}
