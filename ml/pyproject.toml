@@ -26,6 +26,9 @@ persistent = false
 [tool.pylint.format]
 max-line-length = 120
 
+[tool.pylint.typecheck]
+generated-members = ["cv2.*"]
+
 [tool.pylint.messages_control]
 disable = [
   "missing-module-docstring",
