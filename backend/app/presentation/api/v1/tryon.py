@@ -7,7 +7,16 @@ import asyncio
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dto.media_dto import MediaType
@@ -15,14 +24,19 @@ from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 from app.infrastructure.auth.security import get_current_user, get_user_by_token
-from app.infrastructure.cache.tryon_cache import build_tryon_cache_key, get_cached_tryon_result
+from app.infrastructure.cache.tryon_cache import (
+    build_tryon_cache_key,
+    get_cached_tryon_result,
+)
 from app.infrastructure.cache.tryon_rate_limit import enforce_tryon_rate_limit
 from app.infrastructure.db.db import AsyncSessionLocal, get_db
 from app.infrastructure.maintenance.tryon_cleanup import run_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import run_tryon_recovery
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.infrastructure.persistence.repositories.media_repo import MediaRepository
-from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
+from app.infrastructure.persistence.repositories.tryon_event_repo import (
+    TryOnEventRepository,
+)
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (
     build_tryon_task_payload,
@@ -33,7 +47,11 @@ from app.infrastructure.queue.tryon_queue import (
     request_tryon_cancellation,
     requeue_tryon_dead_letter,
 )
-from app.presentation.api.schemas.tryon import TryOnResult, TryOnSessionCreate, TryOnSessionResponse
+from app.presentation.api.schemas.tryon import (
+    TryOnResult,
+    TryOnSessionCreate,
+    TryOnSessionResponse,
+)
 from app.presentation.api.schemas.user import UserResponse
 
 router = APIRouter()
@@ -82,7 +100,9 @@ async def try_on(
         extension = os.path.splitext(filename or "")[1] or ".png"
         return f"user_{current_user.id}/tryon/{kind}/{uuid.uuid4()}{extension}"
 
-    async def persist_media(file_bytes: bytes, file_name: str, content_type: str) -> int:
+    async def persist_media(
+        file_bytes: bytes, file_name: str, content_type: str
+    ) -> int:
         media = await media_repo.create_with_upload(
             db,
             file_content=file_bytes,
@@ -184,7 +204,12 @@ async def try_on(
         )
         await enqueue_tryon_task(task)
     except Exception as exc:
-        await tryon_repo.update_status(db, session.id, TryOnStatus.FAILED, error_text=str(exc))
+        await tryon_repo.update_status(
+            db,
+            session.id,
+            TryOnStatus.FAILED,
+            error_text=str(exc),
+        )
         await event_repo.create_event(
             db,
             session_id=session.id,
@@ -193,7 +218,10 @@ async def try_on(
             error_text=str(exc),
             details="Failed to enqueue try-on task",
         )
-        raise HTTPException(status_code=500, detail=f"Ошибка постановки задачи в очередь: {str(exc)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка постановки задачи в очередь: {str(exc)}",
+        )
 
     return {
         "success": True,
@@ -238,7 +266,11 @@ async def cancel_tryon_session(
     if session is None or session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Try-on session not found")
 
-    if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED}:
+    if session.status in {
+        TryOnStatus.COMPLETED,
+        TryOnStatus.FAILED,
+        TryOnStatus.CANCELED,
+    }:
         return TryOnResult(
             session=TryOnSessionResponse.from_orm(session),
             result_image_url=_build_media_file_url(session.result_media_id),
@@ -269,7 +301,10 @@ async def cancel_tryon_session(
 async def tryon_session_websocket(websocket: WebSocket, session_id: int):
     token = websocket.query_params.get("token")
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Missing token",
+        )
         return
 
     await websocket.accept()
@@ -298,16 +333,24 @@ async def tryon_session_websocket(websocket: WebSocket, session_id: int):
                     await websocket.send_json(payload)
                     last_payload = payload
 
-                if session.status in {TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED}:
+                if session.status in {
+                    TryOnStatus.COMPLETED,
+                    TryOnStatus.FAILED,
+                    TryOnStatus.CANCELED,
+                }:
                     await websocket.close()
                     return
 
                 await asyncio.sleep(1)
                 await db.refresh(session)
     except HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Unauthorized",
+        )
     except WebSocketDisconnect:
         return
+
 
 @router.get("/queue/dead-letter")
 async def tryon_dead_letter_queue(
@@ -320,7 +363,10 @@ async def tryon_dead_letter_queue(
             "requested_by_user_id": current_user.id,
         }
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Try-on dead-letter queue unavailable: {str(exc)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Try-on dead-letter queue unavailable: {str(exc)}",
+        )
 
 
 @router.post("/queue/dead-letter/{index}/requeue")
@@ -337,7 +383,10 @@ async def requeue_dead_letter_tryon(
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Try-on dead-letter requeue unavailable: {str(exc)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Try-on dead-letter requeue unavailable: {str(exc)}",
+        )
 
 
 @router.get("/system/metrics")
@@ -352,7 +401,10 @@ async def tryon_system_metrics(
         queue_health = await get_tryon_queue_health()
         processing_locks = await get_tryon_processing_lock_count()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Try-on metrics unavailable: {str(exc)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Try-on metrics unavailable: {str(exc)}",
+        )
 
     return {
         "queue": {
