@@ -8,7 +8,6 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.infrastructure.db.db import engine
-from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.infrastructure.queue.redis_client import get_redis_client
 from app.infrastructure.queue.tryon_queue import get_tryon_queue_health, get_tryon_worker_heartbeat
 from app.infrastructure.storage.s3 import s3_client
@@ -89,6 +88,8 @@ async def build_backend_readiness_payload() -> dict[str, Any]:
 
 
 def build_tryon_service_health_payload() -> dict[str, Any]:
+    from app.infrastructure.ml.ootd_service import get_ootd_service
+
     ml_service = get_ootd_service()
     return ml_service.health_check()
 
