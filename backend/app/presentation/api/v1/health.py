@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app.core.health import (
@@ -28,7 +28,9 @@ async def backend_readiness():
 
 @router.get("/tryon")
 async def tryon_health():
-    return build_tryon_service_health_payload()
+    payload = await build_tryon_service_health_payload()
+    status_code = 200 if payload["status"] == "ok" else 503
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 @router.get("/tryon/worker")
@@ -40,7 +42,6 @@ async def tryon_worker_health():
 
 @router.get("/tryon/queue")
 async def tryon_queue_health():
-    try:
-        return await build_tryon_queue_health_payload()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Try-on queue unavailable: {str(exc)}")
+    payload = await build_tryon_queue_health_payload()
+    status_code = 200 if payload["status"] == "ok" else 503
+    return JSONResponse(status_code=status_code, content=payload)
