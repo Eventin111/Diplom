@@ -134,7 +134,6 @@ def test_tryon_worker_health_returns_ok_for_fresh_heartbeat(monkeypatch):
     assert payload["status"] == "ok"
     assert payload["worker_alive"] is True
     assert payload["reason"] is None
-    assert payload["queue"] == {"status": "ok"}
     assert payload["component"] == "worker"
 
 
@@ -152,7 +151,6 @@ def test_tryon_worker_health_returns_degraded_for_missing_heartbeat(monkeypatch)
 
     assert payload["status"] == "disabled"
     assert payload["reason"] == "try-on worker heartbeat is missing"
-    assert payload["queue"] == {"status": "ok"}
 
 
 def test_tryon_worker_health_returns_degraded_for_stale_heartbeat(monkeypatch):
@@ -197,33 +195,6 @@ def test_tryon_model_health_returns_disabled_when_ml_dependency_is_missing(monke
     assert payload["reason"] == "Optional ML dependency is unavailable: cv2"
 
 
-def test_tryon_service_health_returns_503_when_feature_is_disabled(monkeypatch):
-    def fake_model_health():
-        return {"status": "disabled", "reason": "try-on runtime is disabled"}
-
-    async def fake_worker_health():
-        return {"status": "disabled", "reason": "worker is disabled"}
-
-    async def fake_queue_health():
-        return {"status": "ok", "reason": None}
-
-    monkeypatch.setattr(health_module, "check_tryon_model_health", fake_model_health)
-    monkeypatch.setattr(
-        health_api,
-        "build_tryon_service_health_payload",
-        health_module.build_tryon_service_health_payload,
-    )
-    monkeypatch.setattr(health_module, "build_tryon_worker_health_payload", fake_worker_health)
-    monkeypatch.setattr(health_module, "build_tryon_queue_health_payload", fake_queue_health)
-
-    response = asyncio.run(health_api.tryon_health())
-    body = json.loads(response.body)
-
-    assert response.status_code == 503
-    assert body["status"] == "disabled"
-    assert body["ready"] is False
-
-
 def test_tryon_live_returns_200_for_cpu_runtime_when_components_are_alive(monkeypatch):
     def fake_model_health():
         return {
@@ -257,6 +228,9 @@ def test_tryon_live_returns_200_for_cpu_runtime_when_components_are_alive(monkey
     assert response.status_code == 200
     assert body["status"] == "ok"
     assert body["ready"] is True
+    assert "worker" not in body
+    assert "queue" not in body
+    assert body["model"]["runtime_device"] == "cpu"
 
 
 def test_tryon_ready_returns_503_for_cpu_runtime(monkeypatch):
@@ -296,6 +270,9 @@ def test_tryon_ready_returns_503_for_cpu_runtime(monkeypatch):
     assert body["ready"] is False
     assert body["interactive_supported"] is False
     assert body["runtime_device"] == "cpu"
+    assert "worker" not in body
+    assert "queue" not in body
+    assert body["model"]["runtime_device"] == "cpu"
 
 
 def test_tryon_queue_health_returns_503_for_failed_queue(monkeypatch):

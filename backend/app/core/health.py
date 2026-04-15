@@ -253,7 +253,7 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
     runtime_device = _get_tryon_runtime_device()
     try:
         heartbeat = await get_tryon_worker_heartbeat()
-        queue_health = await get_tryon_queue_health()
+        await get_tryon_queue_health()
     except Exception as exc:
         return {
             "status": "error",
@@ -266,7 +266,6 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
             "reason": f"Redis unavailable: {str(exc)}",
             "worker_alive": False,
             "worker": None,
-            "queue": None,
         }
 
     if heartbeat is None:
@@ -281,7 +280,6 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
             "reason": "try-on worker heartbeat is missing",
             "worker_alive": False,
             "worker": None,
-            "queue": queue_health,
         }
 
     updated_at_raw = heartbeat.get("updated_at")
@@ -314,7 +312,6 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
         "worker_alive": worker_alive,
         "heartbeat_age_seconds": age_seconds,
         "worker": heartbeat,
-        "queue": queue_health,
     }
 
 
@@ -344,13 +341,17 @@ async def build_tryon_queue_health_payload() -> dict[str, Any]:
     }
 
 
-async def build_tryon_live_payload() -> dict[str, Any]:
+async def _collect_tryon_health_components() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     model = check_tryon_model_health()
     worker, queue = await asyncio.gather(
         build_tryon_worker_health_payload(),
         build_tryon_queue_health_payload(),
     )
+    return model, worker, queue
 
+
+async def build_tryon_live_payload() -> dict[str, Any]:
+    model, worker, queue = await _collect_tryon_health_components()
     component_statuses = [model.get("status"), worker.get("status"), queue.get("status")]
     if any(component_status in {"error", "degraded"} for component_status in component_statuses):
         status = "degraded"
@@ -362,20 +363,17 @@ async def build_tryon_live_payload() -> dict[str, Any]:
         "service": "tryon-live",
         "ready": status == "ok",
         "checked_at": _utc_now_iso(),
+        "runtime_device": str(
+            model.get("runtime_device") or worker.get("runtime_device") or _get_tryon_runtime_device()
+        ),
+        "interactive_supported": bool(model.get("interactive_supported")) and bool(worker.get("interactive_supported")),
         "reason": _first_non_ok_reason(model, worker, queue),
-        "components": {
-            "model": model,
-            "worker": worker,
-            "queue": queue,
-        },
+        "model": model,
     }
 
 
 async def build_tryon_ready_payload() -> dict[str, Any]:
-    live_payload = await build_tryon_live_payload()
-    model = live_payload["components"]["model"]
-    worker = live_payload["components"]["worker"]
-    queue = live_payload["components"]["queue"]
+    model, worker, queue = await _collect_tryon_health_components()
 
     runtime_device = str(model.get("runtime_device") or worker.get("runtime_device") or _get_tryon_runtime_device())
     interactive_supported = bool(model.get("interactive_supported")) and bool(worker.get("interactive_supported"))
@@ -409,9 +407,5 @@ async def build_tryon_ready_payload() -> dict[str, Any]:
         "runtime_device": runtime_device,
         "interactive_supported": interactive_supported,
         "reason": reason,
-        "components": live_payload["components"],
+        "model": model,
     }
-
-
-async def build_tryon_service_health_payload() -> dict[str, Any]:
-    return await build_tryon_ready_payload()

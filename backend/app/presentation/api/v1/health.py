@@ -9,7 +9,6 @@ from app.core.health import (
     build_tryon_live_payload,
     build_tryon_queue_health_payload,
     build_tryon_ready_payload,
-    build_tryon_service_health_payload,
     build_tryon_worker_health_payload,
 )
 
@@ -24,13 +23,6 @@ async def backend_liveness():
 @router.get("/ready")
 async def backend_readiness():
     payload = await build_backend_readiness_payload()
-    status_code = 200 if payload["status"] == "ok" else 503
-    return JSONResponse(status_code=status_code, content=payload)
-
-
-@router.get("/tryon")
-async def tryon_health():
-    payload = await build_tryon_service_health_payload()
     status_code = 200 if payload["status"] == "ok" else 503
     return JSONResponse(status_code=status_code, content=payload)
 
