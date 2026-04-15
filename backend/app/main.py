@@ -117,7 +117,7 @@ async def lifespan(_: FastAPI):
         await close_redis_client()
 
 
-app = FastAPI(title="SwipeIt Backend (MVP)", lifespan=lifespan)
+app = FastAPI(title="SwipeIt", lifespan=lifespan)
 
 setup_exception_handlers(app)
 

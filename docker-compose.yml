@@ -15,9 +15,14 @@ services:
     restart: unless-stopped
     ports:
       - "${FRONTEND_HOST_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
 
   backend:
     platform: linux/amd64
@@ -51,6 +56,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     volumes:
       - ./ml/checkpoints:/app/ml/checkpoints:ro
       - ./ml/checkpoints:/app/ml/third_party/checkpoints:ro

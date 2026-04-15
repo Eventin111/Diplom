@@ -6,7 +6,6 @@ Presentation Layer: создание сессий, постановка зада
 import asyncio
 import os
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +30,6 @@ from app.infrastructure.queue.tryon_queue import (
     get_tryon_dead_letters,
     get_tryon_processing_lock_count,
     get_tryon_queue_health,
-    get_tryon_worker_heartbeat,
     request_tryon_cancellation,
     requeue_tryon_dead_letter,
 )
@@ -310,75 +308,6 @@ async def tryon_session_websocket(websocket: WebSocket, session_id: int):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
     except WebSocketDisconnect:
         return
-
-
-@router.get("/health")
-async def health_check(use_case: TryOnUseCase = Depends(get_tryon_use_case)):
-    ml_service = use_case._ml_service
-    return ml_service.health_check()
-
-
-@router.get("/health/worker")
-async def worker_health_check():
-    try:
-        heartbeat = await get_tryon_worker_heartbeat()
-        queue_health = await get_tryon_queue_health()
-    except Exception as exc:
-        return {
-            "status": "degraded",
-            "reason": f"Redis unavailable: {str(exc)}",
-            "worker_alive": False,
-            "worker": None,
-            "queue": None,
-        }
-
-    if heartbeat is None:
-        return {
-            "status": "degraded",
-            "reason": "try-on worker heartbeat is missing",
-            "worker_alive": False,
-            "worker": None,
-            "queue": queue_health,
-        }
-
-    updated_at_raw = heartbeat.get("updated_at")
-    age_seconds = None
-    worker_alive = False
-    if isinstance(updated_at_raw, str):
-        try:
-            updated_at = datetime.fromisoformat(updated_at_raw.replace("Z", "+00:00"))
-            age_seconds = max(0.0, (datetime.now(timezone.utc) - updated_at).total_seconds())
-            worker_alive = age_seconds <= settings.TRYON_WORKER_HEARTBEAT_TTL_SECONDS * 2
-        except ValueError:
-            age_seconds = None
-
-    cuda_available = bool(heartbeat.get("cuda_available"))
-    require_cuda = bool(heartbeat.get("tryon_require_cuda", settings.TRYON_REQUIRE_CUDA))
-    cuda_ok = cuda_available or not require_cuda
-
-    reason = None
-    if not worker_alive:
-        reason = "worker heartbeat is stale"
-    elif not cuda_ok:
-        reason = "worker has no CUDA but TRYON_REQUIRE_CUDA=true"
-
-    return {
-        "status": "ok" if worker_alive and cuda_ok else "degraded",
-        "reason": reason,
-        "worker_alive": worker_alive,
-        "heartbeat_age_seconds": age_seconds,
-        "worker": heartbeat,
-        "queue": queue_health,
-    }
-
-
-@router.get("/queue/health")
-async def queue_health_check():
-    try:
-        return await get_tryon_queue_health()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Try-on queue unavailable: {str(exc)}")
-
 
 @router.get("/queue/dead-letter")
 async def tryon_dead_letter_queue(
