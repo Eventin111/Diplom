@@ -224,6 +224,80 @@ def test_tryon_service_health_returns_503_when_feature_is_disabled(monkeypatch):
     assert body["ready"] is False
 
 
+def test_tryon_live_returns_200_for_cpu_runtime_when_components_are_alive(monkeypatch):
+    def fake_model_health():
+        return {
+            "status": "ok",
+            "enabled": True,
+            "runtime_device": "cpu",
+            "interactive_supported": False,
+            "reason": "CPU mode does not support interactive try-on within expected time",
+        }
+
+    async def fake_worker_health():
+        return {
+            "status": "ok",
+            "worker_alive": True,
+            "runtime_device": "cpu",
+            "interactive_supported": False,
+            "reason": None,
+        }
+
+    async def fake_queue_health():
+        return {"status": "ok", "reason": None}
+
+    monkeypatch.setattr(health_api, "build_tryon_live_payload", health_module.build_tryon_live_payload)
+    monkeypatch.setattr(health_module, "check_tryon_model_health", fake_model_health)
+    monkeypatch.setattr(health_module, "build_tryon_worker_health_payload", fake_worker_health)
+    monkeypatch.setattr(health_module, "build_tryon_queue_health_payload", fake_queue_health)
+
+    response = asyncio.run(health_api.tryon_liveness())
+    body = json.loads(response.body)
+
+    assert response.status_code == 200
+    assert body["status"] == "ok"
+    assert body["ready"] is True
+
+
+def test_tryon_ready_returns_503_for_cpu_runtime(monkeypatch):
+    def fake_model_health():
+        return {
+            "status": "ok",
+            "enabled": True,
+            "runtime_device": "cpu",
+            "interactive_supported": False,
+            "reason": "CPU mode does not support interactive try-on within expected time",
+            "details": {"cuda_available": False},
+        }
+
+    async def fake_worker_health():
+        return {
+            "status": "ok",
+            "worker_alive": True,
+            "runtime_device": "cpu",
+            "interactive_supported": False,
+            "reason": None,
+            "worker": {"cuda_available": False},
+        }
+
+    async def fake_queue_health():
+        return {"status": "ok", "reason": None}
+
+    monkeypatch.setattr(health_api, "build_tryon_ready_payload", health_module.build_tryon_ready_payload)
+    monkeypatch.setattr(health_module, "check_tryon_model_health", fake_model_health)
+    monkeypatch.setattr(health_module, "build_tryon_worker_health_payload", fake_worker_health)
+    monkeypatch.setattr(health_module, "build_tryon_queue_health_payload", fake_queue_health)
+
+    response = asyncio.run(health_api.tryon_readiness())
+    body = json.loads(response.body)
+
+    assert response.status_code == 503
+    assert body["status"] == "degraded"
+    assert body["ready"] is False
+    assert body["interactive_supported"] is False
+    assert body["runtime_device"] == "cpu"
+
+
 def test_tryon_queue_health_returns_503_for_failed_queue(monkeypatch):
     async def fake_queue_payload():
         return {

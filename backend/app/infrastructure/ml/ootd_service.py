@@ -8,7 +8,7 @@ from typing import Optional
 
 from PIL import Image
 
-from app.core.config import settings
+from app.core.config import project_config, settings
 
 # Добавляем путь к ML коду
 # Путь: backend/app/infrastructure/ml/ootd_service.py -> корень проекта
@@ -136,6 +136,7 @@ class OOTDService:
             "gpu_id": self.gpu_id,
             "cuda_available": cuda_available,
             "gpu_name": gpu_name,
+            "runtime_device": str(getattr(project_config.ml, "device", "cpu")).strip().lower() or "cpu",
             "tryon_require_cuda": bool(settings.TRYON_REQUIRE_CUDA),
         }
 

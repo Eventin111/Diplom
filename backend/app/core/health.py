@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import text
 
-from app.core.config import settings
+from app.core.config import project_config, settings
 from app.infrastructure.db.db import engine
 from app.infrastructure.queue.redis_client import get_redis_client
 from app.infrastructure.queue.tryon_queue import get_tryon_queue_health, get_tryon_worker_heartbeat
@@ -32,6 +32,22 @@ def _build_target(host: str | None, port: int | None) -> str | None:
 def _build_redis_target() -> str:
     parsed = urlparse(settings.REDIS_URL)
     return parsed.netloc or settings.REDIS_URL
+
+
+def _get_tryon_runtime_device() -> str:
+    return str(getattr(project_config.ml, "device", "cpu")).strip().lower() or "cpu"
+
+
+def _is_tryon_interactive_supported(*, runtime_device: str, cuda_available: bool) -> bool:
+    return runtime_device != "cpu" and cuda_available
+
+
+def _build_tryon_interactive_reason(*, runtime_device: str, cuda_available: bool) -> str | None:
+    if runtime_device == "cpu":
+        return "CPU mode does not support interactive try-on within expected time"
+    if not cuda_available:
+        return "GPU acceleration is unavailable for interactive try-on"
+    return None
 
 
 def _first_non_ok_reason(*payloads: dict[str, Any]) -> str | None:
@@ -175,6 +191,7 @@ async def build_backend_readiness_payload() -> dict[str, Any]:
 
 def check_tryon_model_health() -> dict[str, Any]:
     start_time = time.perf_counter()
+    runtime_device = _get_tryon_runtime_device()
     try:
         from app.infrastructure.ml.ootd_service import get_ootd_service
     except ModuleNotFoundError as exc:
@@ -185,6 +202,8 @@ def check_tryon_model_health() -> dict[str, Any]:
             "component": "model",
             "target": "OOTDiffusion",
             "enabled": False,
+            "runtime_device": runtime_device,
+            "interactive_supported": False,
             "reason": f"Optional ML dependency is unavailable: {exc.name}",
         }
     except Exception as exc:
@@ -195,29 +214,43 @@ def check_tryon_model_health() -> dict[str, Any]:
             "component": "model",
             "target": "OOTDiffusion",
             "enabled": False,
+            "runtime_device": runtime_device,
+            "interactive_supported": False,
             "reason": str(exc),
         }
 
     ml_service = get_ootd_service()
     raw_payload = ml_service.health_check()
     cuda_available = bool(raw_payload.get("cuda_available"))
-    require_cuda = bool(raw_payload.get("tryon_require_cuda", settings.TRYON_REQUIRE_CUDA))
-    cuda_ready = cuda_available or not require_cuda
+    interactive_supported = _is_tryon_interactive_supported(
+        runtime_device=runtime_device,
+        cuda_available=cuda_available,
+    )
+    reason = _build_tryon_interactive_reason(
+        runtime_device=runtime_device,
+        cuda_available=cuda_available,
+    )
 
     return {
-        "status": "ok" if cuda_ready else "degraded",
+        "status": "ok",
         "checked_at": _utc_now_iso(),
         "latency_ms": _duration_ms(start_time),
         "component": "model",
         "target": raw_payload.get("model", "OOTDiffusion"),
         "enabled": True,
-        "reason": None if cuda_ready else "CUDA is required but unavailable",
-        "details": raw_payload,
+        "runtime_device": runtime_device,
+        "interactive_supported": interactive_supported,
+        "reason": reason,
+        "details": {
+            **raw_payload,
+            "runtime_device": runtime_device,
+        },
     }
 
 
 async def build_tryon_worker_health_payload() -> dict[str, Any]:
     start_time = time.perf_counter()
+    runtime_device = _get_tryon_runtime_device()
     try:
         heartbeat = await get_tryon_worker_heartbeat()
         queue_health = await get_tryon_queue_health()
@@ -228,6 +261,8 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
             "latency_ms": _duration_ms(start_time),
             "component": "worker",
             "target": settings.TRYON_WORKER_HEARTBEAT_KEY,
+            "runtime_device": runtime_device,
+            "interactive_supported": False,
             "reason": f"Redis unavailable: {str(exc)}",
             "worker_alive": False,
             "worker": None,
@@ -241,6 +276,8 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
             "latency_ms": _duration_ms(start_time),
             "component": "worker",
             "target": settings.TRYON_WORKER_HEARTBEAT_KEY,
+            "runtime_device": runtime_device,
+            "interactive_supported": False,
             "reason": "try-on worker heartbeat is missing",
             "worker_alive": False,
             "worker": None,
@@ -259,21 +296,20 @@ async def build_tryon_worker_health_payload() -> dict[str, Any]:
             age_seconds = None
 
     cuda_available = bool(heartbeat.get("cuda_available"))
-    require_cuda = bool(heartbeat.get("tryon_require_cuda", settings.TRYON_REQUIRE_CUDA))
-    cuda_ok = cuda_available or not require_cuda
-
-    reason = None
-    if not worker_alive:
-        reason = "worker heartbeat is stale"
-    elif not cuda_ok:
-        reason = "worker has no CUDA but TRYON_REQUIRE_CUDA=true"
+    interactive_supported = _is_tryon_interactive_supported(
+        runtime_device=runtime_device,
+        cuda_available=cuda_available,
+    )
+    reason = "worker heartbeat is stale" if not worker_alive else None
 
     return {
-        "status": "ok" if worker_alive and cuda_ok else "degraded",
+        "status": "ok" if worker_alive else "degraded",
         "checked_at": _utc_now_iso(),
         "latency_ms": _duration_ms(start_time),
         "component": "worker",
         "target": settings.TRYON_WORKER_HEARTBEAT_KEY,
+        "runtime_device": runtime_device,
+        "interactive_supported": interactive_supported,
         "reason": reason,
         "worker_alive": worker_alive,
         "heartbeat_age_seconds": age_seconds,
@@ -308,7 +344,7 @@ async def build_tryon_queue_health_payload() -> dict[str, Any]:
     }
 
 
-async def build_tryon_service_health_payload() -> dict[str, Any]:
+async def build_tryon_live_payload() -> dict[str, Any]:
     model = check_tryon_model_health()
     worker, queue = await asyncio.gather(
         build_tryon_worker_health_payload(),
@@ -316,16 +352,14 @@ async def build_tryon_service_health_payload() -> dict[str, Any]:
     )
 
     component_statuses = [model.get("status"), worker.get("status"), queue.get("status")]
-    if "disabled" in component_statuses:
-        status = "disabled"
-    elif any(component_status in {"error", "degraded"} for component_status in component_statuses):
+    if any(component_status in {"error", "degraded"} for component_status in component_statuses):
         status = "degraded"
     else:
         status = "ok"
 
     return {
         "status": status,
-        "service": "tryon",
+        "service": "tryon-live",
         "ready": status == "ok",
         "checked_at": _utc_now_iso(),
         "reason": _first_non_ok_reason(model, worker, queue),
@@ -335,3 +369,49 @@ async def build_tryon_service_health_payload() -> dict[str, Any]:
             "queue": queue,
         },
     }
+
+
+async def build_tryon_ready_payload() -> dict[str, Any]:
+    live_payload = await build_tryon_live_payload()
+    model = live_payload["components"]["model"]
+    worker = live_payload["components"]["worker"]
+    queue = live_payload["components"]["queue"]
+
+    runtime_device = str(model.get("runtime_device") or worker.get("runtime_device") or _get_tryon_runtime_device())
+    interactive_supported = bool(model.get("interactive_supported")) and bool(worker.get("interactive_supported"))
+    queue_ready = queue.get("status") == "ok"
+    worker_ready = bool(worker.get("worker_alive"))
+    model_enabled = bool(model.get("enabled"))
+
+    if not model_enabled:
+        status = "disabled"
+    elif not queue_ready or not worker_ready:
+        status = "degraded"
+    elif not interactive_supported:
+        status = "degraded"
+    else:
+        status = "ok"
+
+    reason = _first_non_ok_reason(model, worker, queue)
+    if reason is None and not interactive_supported:
+        reason = _build_tryon_interactive_reason(
+            runtime_device=runtime_device,
+            cuda_available=bool(
+                worker.get("worker", {}).get("cuda_available", model.get("details", {}).get("cuda_available", False))
+            ),
+        )
+
+    return {
+        "status": status,
+        "service": "tryon",
+        "ready": status == "ok",
+        "checked_at": _utc_now_iso(),
+        "runtime_device": runtime_device,
+        "interactive_supported": interactive_supported,
+        "reason": reason,
+        "components": live_payload["components"],
+    }
+
+
+async def build_tryon_service_health_payload() -> dict[str, Any]:
+    return await build_tryon_ready_payload()

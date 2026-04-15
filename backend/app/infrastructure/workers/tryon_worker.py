@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.application.dto.media_dto import MediaType
-from app.core.config import settings
+from app.core.config import project_config, settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
 from app.infrastructure.cache.tryon_cache import build_tryon_cache_key, cache_tryon_result, get_cached_tryon_result
 from app.infrastructure.db.db import AsyncSessionLocal, engine
@@ -133,6 +133,7 @@ async def _publish_worker_heartbeat(state: str, *, session_id: int | None = None
         "session_id": session_id,
         "pid": os.getpid(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "runtime_device": str(getattr(project_config.ml, "device", "cpu")).strip().lower() or "cpu",
         "tryon_require_cuda": bool(settings.TRYON_REQUIRE_CUDA),
     }
     payload.update(_get_cuda_runtime_snapshot())
