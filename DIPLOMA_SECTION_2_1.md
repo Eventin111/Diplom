@@ -640,10 +640,6 @@ return f"tryon:result:{digest.hexdigest()}"
 
 Пользователь также может отменить сессию примерки. В этом случае API устанавливает Redis-флаг отмены, а worker во время выполнения периодически проверяет этот флаг и завершает дочерний процесс ML-обработки. После отмены сессия переводится в статус `CANCELED`, а временные runtime-артефакты очищаются.
 
-**Проверка готовности ML-сервиса**
-
-Для эксплуатационного контроля в ML-адаптере предусмотрен `health_check`, который возвращает статус сервиса, идентификатор GPU, доступность CUDA, имя видеокарты и фактический runtime device. Эти данные используются в health endpoints и позволяют быстро определить, готов ли worker к выполнению ML-задач.
-
 В результате ML-сервис интегрирован в приложение не как отдельный изолированный скрипт, а как полноценная часть серверной архитектуры. API отвечает за прием пользовательских данных и создание управляемой сессии, application layer описывает бизнес-сценарий через use case и порт, infrastructure layer обеспечивает очередь, кэш, хранилище и адаптер подключения ML-сервиса, а отдельный worker выполняет ресурсоемкую обработку без блокировки основного web-приложения. Такая организация делает интеграцию масштабируемой, тестируемой и устойчивой к ошибкам, сохраняя возможность дальнейшей замены ML-модели или изменения способа ее развертывания.
 
 ---
@@ -917,514 +913,299 @@ async def get_user_profile(user_id: int):
 
 ---
 
-### 2.1.4 Реализация Rest-сервиса программной системы
+### 2.1.4 Реализация REST-сервиса программной системы
 
-#### 2.1.4.1 Архитектура REST API
+REST-сервис является внешним интерфейсом серверной части SwipeIt и обеспечивает взаимодействие frontend-приложения с бизнес-логикой системы. Через него выполняются регистрация и аутентификация пользователей, загрузка медиафайлов, работа с гардеробом, публикация записей в ленте, управление реакциями и запуск сценария виртуальной примерки. Сервис реализован на FastAPI, что позволяет объединить асинхронную обработку запросов, декларативную валидацию данных, dependency injection и автоматическую генерацию OpenAPI-документации.
 
-REST (Representational State Transfer) API разработана с соблюдением принципов HATEOAS и правильного использования HTTP методов и кодов состояния.
+Основная идея реализации REST API заключается в том, что слой представления не содержит бизнес-логики напрямую. Каждый endpoint принимает HTTP-запрос, валидирует входные данные через Pydantic-схемы, получает необходимые зависимости через `Depends`, вызывает репозиторий или use case и возвращает типизированный ответ. Благодаря этому REST-слой остается тонким адаптером между внешними клиентами и внутренними слоями приложения.
 
-#### 2.1.4.2 Структура API версий
+**Инициализация приложения и маршрутизация**
+
+FastAPI-приложение создается в `backend/app/main.py`. На этапе инициализации подключаются обработчики ошибок, middleware для CORS и общий маршрутизатор API. Все пользовательские маршруты подключаются с единым префиксом `settings.API_V1`, что позволяет версионировать API и при необходимости добавлять новые версии без изменения существующих клиентов.
+
+```python
+# backend/app/main.py
+app = FastAPI(title="SwipeIt", lifespan=lifespan)
+
+setup_exception_handlers(app)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router, prefix=settings.API_V1)
+```
+
+Главный API-роутер агрегирует функциональные группы endpoints. Каждая группа находится в отдельном модуле и имеет собственный URL-префикс и тег для документации:
+
+```python
+# presentation/api/routes.py
+api_router = APIRouter()
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(media.router, prefix="/media", tags=["media"])
+api_router.include_router(garments.router, prefix="/garments", tags=["garments"])
+api_router.include_router(feed.router, prefix="/feed", tags=["feed"])
+api_router.include_router(tryon.router, prefix="/tryon", tags=["tryon"])
+```
+
+Структура пользовательского API выглядит следующим образом:
 
 ```
 /api/v1/
-├── /auth              # Аутентификация и авторизация
-├── /users             # Управление пользователями
-├── /garments          # Управление гардеробом
-├── /media             # Загрузка и получение медиа
-├── /feed              # Лента новостей
-├── /likes             # Система лайков
-├── /tryon             # Виртуальная примерка
-└── /health            # Проверка здоровья сервиса
+├── auth/       # регистрация, вход, получение и обновление профиля
+├── media/      # загрузка, получение и удаление медиафайлов
+├── garments/   # создание и просмотр предметов одежды
+├── feed/       # публикации, лента и реакции
+└── tryon/      # запуск и контроль сессий виртуальной примерки
 ```
 
-#### 2.1.4.3 API эндпоинты аутентификации
+Такое разделение делает API предсказуемым: клиенту легко понять, какая группа маршрутов отвечает за конкретную область системы, а разработчику проще сопровождать код, так как endpoint-и не смешиваются в одном большом файле.
 
-**POST /api/v1/auth/signup - Регистрация пользователя**
+**Валидация данных и схемы ответов**
+
+Для описания входных и выходных данных используются Pydantic-схемы. Они выполняют сразу несколько задач: валидируют тело запроса, приводят данные к нужным типам, формируют структуру ответа и участвуют в генерации OpenAPI-спецификации. Например, пользовательские endpoints возвращают `UserResponse`, а endpoints примерки используют `TryOnSessionResponse` и `TryOnResult`.
 
 ```python
-@router.post("/signup", response_model=TokenResponse)
-async def signup(
-    credentials: SignUpRequest,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Регистрация нового пользователя
-    
-    Args:
-        credentials: {email, username, password}
-    
-    Returns:
-        {access_token, token_type, user}
-    """
-    # Проверить, что пользователь не существует
-    user_repo = UserRepository()
-    existing = await user_repo.get_by_email(db, credentials.email)
-    
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail="User already exists"
-        )
-    
-    # Создать новго пользователя
-    hashed_password = hash_password(credentials.password)
-    user = await user_repo.create(
-        db,
-        obj_in={
-            "email": credentials.email,
-            "username": credentials.username,
-            "hashed_password": hashed_password
-        }
-    )
-    
-    # Сгенерировать токен
-    access_token = create_access_token({"sub": user.id})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user
-    }
+class UserResponse(UserBase):
+    id: int
+    avatar_url: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
 ```
 
-**POST /api/v1/auth/login - Вход в систему**
+Для сессии виртуальной примерки схема ответа отделяет служебную информацию о сессии от ссылки на итоговое изображение:
 
 ```python
-@router.post("/login", response_model=TokenResponse)
+class TryOnResult(BaseModel):
+    session: TryOnSessionResponse
+    result_image_url: Optional[str] = None
+```
+
+Использование `response_model` в роутерах дополнительно ограничивает формат ответа. Даже если внутренняя ORM-модель содержит больше полей, клиент получает только те данные, которые явно разрешены схемой.
+
+**Аутентификация и управление пользователем**
+
+Аутентификация реализована через JWT-токены и стандартную схему OAuth2 Bearer. Пользователь регистрируется через `POST /api/v1/auth/register`, после чего может получить токен через `POST /api/v1/auth/login`. Endpoint `GET /api/v1/auth/me` возвращает данные текущего пользователя, а `PATCH /api/v1/auth/me` обновляет профиль.
+
+```python
+@router.post("/login", response_model=Token)
 async def login(
-    credentials: LoginRequest,
-    db: AsyncSession = Depends(get_db)
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Вход в систему"""
-    # Найти пользователя
     user_repo = UserRepository()
-    user = await user_repo.get_by_email(db, credentials.email)
-    
-    if not user or not verify_password(credentials.password, user.hashed_password):
+    user = await user_repo.authenticate(
+        db,
+        email=form_data.username,
+        password=form_data.password,
+    )
+
+    if not user:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный email или пароль",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Сгенерировать токен
-    access_token = create_access_token({"sub": user.id})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user
-    }
+
+    access_token = create_token(sub=user.id, ttl_min=60)
+    return Token(access_token=access_token, token_type="bearer")
 ```
 
-#### 2.1.4.4 API эндпоинты гардероба
+За получение пользователя из токена отвечает зависимость `get_current_user`. Она извлекает Bearer-токен, декодирует JWT, проверяет срок действия и загружает пользователя из базы данных. За счет `Depends(get_current_user)` защищенные endpoints не дублируют код авторизации.
 
-**POST /api/v1/garments - Добавить вещь в гардероб**
+```python
+async def get_current_user(
+    token: str = Depends(oauth),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_user_by_token(token=token, db=db)
+```
+
+**Работа с медиафайлами**
+
+REST-сервис предоставляет endpoints для загрузки пользовательских изображений, получения метаданных, выдачи бинарного файла и удаления медиа. Загрузка выполняется через `multipart/form-data`, что удобно для frontend-приложения и позволяет передавать файлы без ручного кодирования в base64.
+
+```python
+@router.post("/upload", response_model=MediaUploadResponse)
+async def upload_media(
+    file: UploadFile = File(...),
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неподдерживаемый тип файла",
+        )
+
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"user_{current_user.id}/{uuid.uuid4()}{file_extension}"
+    file_content = await file.read()
+    media_type = ALLOWED_CONTENT_TYPES[file.content_type]
+    media_repo = MediaRepository()
+
+    media = await media_repo.create_with_upload(
+        db,
+        file_content=file_content,
+        file_key=unique_filename,
+        kind=media_type,
+        owner_user_id=current_user.id,
+        content_type=file.content_type,
+    )
+
+    return MediaUploadResponse(
+        media=media,
+        upload_url=f"{settings.API_V1}/media/{media.id}/file",
+    )
+```
+
+Файл может быть сохранен в S3-совместимом хранилище или локально, а клиент получает стабильную ссылку вида `/api/v1/media/{media_id}/file`. Такая схема скрывает от клиента детали физического хранения и позволяет в дальнейшем заменить storage без изменения публичного API.
+
+**Гардероб и лента**
+
+Модуль `garments` отвечает за создание и получение предметов одежды. Он использует `GarmentRepository`, а данные запроса и ответа описываются схемами `GarmentCreate` и `GarmentResponse`.
 
 ```python
 @router.post("/", response_model=GarmentResponse)
 async def create_garment(
     garment_data: GarmentCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Создать новую вещь в гардеробе
-    
-    Request:
-        {
-            "name": "Синий свитер",
-            "description": "Уютный свитер",
-            "category": "tops",
-            "color": "blue",
-            "size": "M",
-            "image_url": "..."
-        }
-    """
     garment_repo = GarmentRepository()
-    garment = await garment_repo.create(
-        db,
-        obj_in={
-            **garment_data.dict(),
-            "user_id": current_user.id
-        }
-    )
+    garment = await garment_repo.create(db, obj_in=garment_data)
     return garment
 ```
 
-**GET /api/v1/garments/{id} - Получить информацию о вещи**
+Модуль `feed` реализует публикацию записей, получение ленты с пагинацией и работу с лайками. Для ленты используется ответ `FeedPagination`, который содержит элементы, признак наличия следующей страницы и курсор продолжения. Это упрощает frontend-части реализацию бесконечной прокрутки.
 
 ```python
-@router.get("/{garment_id}", response_model=GarmentResponse)
-async def get_garment(
-    garment_id: int,
-    db: AsyncSession = Depends(get_db)
+@router.get("/", response_model=FeedPagination)
+async def get_feed(
+    skip: int = 0,
+    limit: int = 20,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Получить информацию о конкретной вещи"""
-    garment_repo = GarmentRepository()
-    garment = await garment_repo.get(db, garment_id)
-    
-    if not garment:
-        raise HTTPException(status_code=404, detail="Garment not found")
-    
-    return garment
-```
-
-**GET /api/v1/garments - Получить список вещей**
-
-```python
-@router.get("/", response_model=list[GarmentResponse])
-async def list_garments(
-    current_user: User = Depends(get_current_user),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    category: str | None = Query(None),
-    db: AsyncSession = Depends(get_db)
-):
-    """Получить список вещей текущего пользователя"""
-    garment_repo = GarmentRepository()
-    
-    # Построить фильтр
-    filters = {"user_id": current_user.id}
-    if category:
-        filters["category"] = category
-    
-    garments = await garment_repo.get_multi(
+    feed_repo = FeedRepository()
+    feed_with_stats = await feed_repo.get_feed_with_stats(
         db,
+        current_user_id=current_user.id,
         skip=skip,
         limit=limit,
-        **filters
-    )
-    
-    return garments
-```
-
-**PUT /api/v1/garments/{id} - Обновить информацию о вещи**
-
-```python
-@router.put("/{garment_id}", response_model=GarmentResponse)
-async def update_garment(
-    garment_id: int,
-    garment_update: GarmentUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Обновить информацию о вещи"""
-    garment_repo = GarmentRepository()
-    garment = await garment_repo.get(db, garment_id)
-    
-    if not garment:
-        raise HTTPException(status_code=404, detail="Garment not found")
-    
-    if garment.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    updated = await garment_repo.update(db, garment, garment_update)
-    return updated
-```
-
-**DELETE /api/v1/garments/{id} - Удалить вещь**
-
-```python
-@router.delete("/{garment_id}", status_code=204)
-async def delete_garment(
-    garment_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Удалить вещь из гардероба"""
-    garment_repo = GarmentRepository()
-    garment = await garment_repo.get(db, garment_id)
-    
-    if not garment:
-        raise HTTPException(status_code=404, detail="Garment not found")
-    
-    if garment.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    await garment_repo.delete(db, garment)
-```
-
-#### 2.1.4.5 API эндпоинты виртуальной примерки
-
-**POST /api/v1/tryon - Создать задачу примерки**
-
-```python
-@router.post("/", response_model=TryOnResponse)
-async def create_tryon(
-    request: TryOnRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Создать задачу виртуальной примерки
-    
-    Request:
-        {
-            "garment_id": 123,
-            "person_image": "base64_encoded_image",
-            "garment_image": "base64_encoded_image",
-            "model_type": "hd",  # "hd" или "dc"
-            "category": 0         # 0, 1 или 2
-        }
-    
-    Response:
-        {
-            "id": "task_id",
-            "status": "processing",
-            "created_at": "2024-01-01T00:00:00",
-            "result_image": null,  # Будет заполнен при завершении
-            "error": null
-        }
-    """
-    # Использовать use case
-    use_case = TryOnUseCase(ml_gateway)
-    
-    # Валидация
-    use_case.validate(request)
-    
-    # Проверить кэш
-    cached = await cache.get(...)
-    if cached:
-        return cached
-    
-    # Создать задачу
-    task_id = await queue.enqueue_tryon_task({
-        "garment_id": request.garment_id,
-        "user_id": current_user.id,
-        "model_type": request.model_type,
-        "category": request.category,
-        "images": {
-            "garment": request.garment_image,
-            "person": request.person_image
-        }
-    })
-    
-    # Сохранить в БД
-    tryon_repo = TryOnRepository()
-    tryon = await tryon_repo.create(
-        db,
-        obj_in={
-            "task_id": task_id,
-            "garment_id": request.garment_id,
-            "user_id": current_user.id,
-            "model_type": request.model_type,
-            "category": request.category,
-            "status": "processing"
-        }
-    )
-    
-    return TryOnResponse(
-        id=tryon.id,
-        task_id=task_id,
-        status="processing",
-        created_at=tryon.created_at
     )
 ```
 
-**GET /api/v1/tryon/{id} - Получить статус примерки**
+Для реакций используются отдельные endpoints `POST /api/v1/feed/{feed_item_id}/like` и `DELETE /api/v1/feed/{feed_item_id}/like`. Это соответствует ресурсной модели REST: лайк рассматривается как действие над конкретной публикацией.
+
+**Endpoints виртуальной примерки**
+
+REST-интерфейс виртуальной примерки построен вокруг понятия сессии. Клиент отправляет запрос `POST /api/v1/tryon/try-on` с двумя файлами: фотографией пользователя и изображением одежды. API сохраняет входные изображения, создает сессию, проверяет кэш и либо сразу возвращает готовый результат, либо ставит задачу в очередь и возвращает статус `QUEUED`.
 
 ```python
-@router.get("/{tryon_id}", response_model=TryOnResponse)
-async def get_tryon(
-    tryon_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+@router.post("/try-on")
+async def try_on(
+    model_image: UploadFile = File(...),
+    cloth_image: UploadFile = File(...),
+    model_type: str = "hd",
+    category: int = 0,
+    scale: float = 2.0,
+    num_steps: int = 4,
+    num_samples: int = 1,
+    current_user: UserResponse = Depends(enforce_current_user_tryon_rate_limit),
+    db: AsyncSession = Depends(get_db),
+    use_case: TryOnUseCase = Depends(get_tryon_use_case),
 ):
-    """Получить статус и результат примерки"""
-    tryon_repo = TryOnRepository()
-    tryon = await tryon_repo.get(db, tryon_id)
-    
-    if not tryon:
-        raise HTTPException(status_code=404, detail="Try-on not found")
-    
-    if tryon.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # Если статус завершен, вернуть результат
-    if tryon.status == "completed":
-        result = await cache.get_result(tryon.task_id)
-        tryon.result_image = result.get("result_image")
-    
-    return tryon
-```
+    model_bytes = await model_image.read()
+    cloth_bytes = await cloth_image.read()
 
-#### 2.1.4.6 API эндпоинты загрузки медиа
-
-**POST /api/v1/media - Загрузить изображение**
-
-```python
-@router.post("/upload", response_model=MediaResponse)
-async def upload_media(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Загрузить медиа файл
-    
-    Поддерживаемые форматы: jpg, jpeg, png, gif
-    Максимальный размер: 10MB
-    """
-    # Валидация файла
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    if file.size > 10 * 1024 * 1024:  # 10MB
-        raise HTTPException(status_code=413, detail="File too large")
-    
-    # Прочитать и обработать файл
-    content = await file.read()
-    
-    # Проверить целостность изображения
-    try:
-        image = Image.open(io.BytesIO(content))
-        image.verify()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid image file")
-    
-    # Сгенерировать имя файла
-    file_id = uuid.uuid4()
-    file_path = f"media/{current_user.id}/{file_id}.jpg"
-    
-    # Загрузить в S3
-    s3_client.upload_file(file_path, content)
-    
-    # Сохранить метаданные в БД
-    media_repo = MediaRepository()
-    media = await media_repo.create(
-        db,
-        obj_in={
-            "user_id": current_user.id,
-            "file_path": file_path,
-            "file_name": file.filename,
-            "file_size": file.size,
-            "content_type": file.content_type
-        }
-    )
-    
-    return MediaResponse(
-        id=media.id,
-        url=s3_client.get_public_url(file_path),
-        created_at=media.created_at
+    use_case.validate_payload(
+        model_type=model_type,
+        category=category,
+        scale=scale,
+        num_steps=num_steps,
+        num_samples=num_samples,
     )
 ```
 
-**GET /api/v1/media/{id} - Получить медиа файл**
+Для получения результата используется `GET /api/v1/tryon/sessions/{session_id}`. Ответ содержит текущий статус сессии и ссылку на результат, если обработка завершена. Дополнительно реализованы отмена сессии через `POST /sessions/{session_id}/cancel` и WebSocket-канал `/sessions/{session_id}/ws`, через который клиент может получать изменения статуса без постоянного ручного опроса.
 
 ```python
-@router.get("/{media_id}")
-async def get_media(
-    media_id: int,
-    db: AsyncSession = Depends(get_db)
+@router.get("/sessions/{session_id}", response_model=TryOnResult)
+async def get_tryon_session(
+    session_id: int,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Получить и вернуть медиа файл"""
-    media_repo = MediaRepository()
-    media = await media_repo.get(db, media_id)
-    
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    
-    # Получить файл из S3
-    file_content = s3_client.download_file(media.file_path)
-    
-    return Response(
-        content=file_content,
-        media_type=media.content_type,
-        headers={"Content-Disposition": f"inline; filename={media.file_name}"}
+    session = await tryon_repo.get(db, session_id)
+
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Try-on session not found")
+
+    return TryOnResult(
+        session=TryOnSessionResponse.from_orm(session),
+        result_image_url=_build_media_file_url(session.result_media_id),
     )
 ```
 
-#### 2.1.4.7 Обработка ошибок и коды состояния
+Таким образом, REST API не раскрывает клиенту внутреннюю механику фоновой обработки. Для frontend-приложения примерка выглядит как управляемая сессия с понятными состояниями: задача создана, находится в обработке, завершена, отменена или завершилась ошибкой.
+
+**Обработка ошибок и коды состояния**
+
+Единый формат ошибок задается в `app/core/errors.py`. Приложение отдельно обрабатывает ошибки валидации, HTTP-исключения и непредвиденные исключения. Это делает поведение API предсказуемым: клиент получает корректный HTTP-код и поле `detail`, а сервер логирует подробности для диагностики.
 
 ```python
-# core/errors.py
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = []
+    for error in exc.errors():
+        field = " -> ".join(str(loc) for loc in error["loc"])
+        errors.append({
+            "field": field,
+            "message": error["msg"],
+            "type": error["type"],
+        })
 
-def setup_exception_handlers(app: FastAPI):
-    """Настроить обработчики ошибок"""
-    
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": {
-                    "status": exc.status_code,
-                    "detail": exc.detail,
-                    "path": str(request.url)
-                }
-            },
-        )
-    
-    @app.exception_handler(ValidationError)
-    async def validation_exception_handler(request: Request, exc: ValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={
-                "error": {
-                    "status": 422,
-                    "detail": "Validation error",
-                    "errors": exc.errors()
-                }
-            },
-        )
-    
-    @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception):
-        logger.error(f"Unhandled exception: {exc}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "status": 500,
-                    "detail": "Internal server error"
-                }
-            },
-        )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Ошибка валидации данных", "errors": errors},
+    )
 ```
 
-**Таблица кодов состояния HTTP**
+Основные HTTP-коды, используемые REST-сервисом:
 
-| Код | Название | Использование |
-|-----|----------|---------------|
-| 200 | OK | Успешный GET, PUT, DELETE запрос |
-| 201 | Created | Успешный POST запрос создания ресурса |
-| 204 | No Content | Успешный DELETE запрос |
-| 400 | Bad Request | Ошибка валидации входных данных |
-| 401 | Unauthorized | Отсутствует авторизация |
-| 403 | Forbidden | Недостаточно прав доступа |
-| 404 | Not Found | Ресурс не найден |
-| 409 | Conflict | Конфликт (например, дубликат) |
-| 413 | Payload Too Large | Файл слишком большой |
-| 422 | Unprocessable Entity | Ошибка валидации схемы |
-| 500 | Internal Server Error | Ошибка сервера |
-| 503 | Service Unavailable | Сервис недоступен |
+| Код | Назначение |
+|-----|------------|
+| 200 | Успешное получение или изменение ресурса |
+| 204 | Успешное удаление без тела ответа |
+| 400 | Некорректные входные данные или неподдерживаемый тип файла |
+| 401 | Отсутствует или недействителен токен авторизации |
+| 403 | Пользователь не имеет доступа к ресурсу |
+| 404 | Запрашиваемый ресурс не найден |
+| 422 | Ошибка валидации Pydantic-схемы |
+| 500 | Непредвиденная ошибка сервера |
+| 503 | Временная недоступность инфраструктурной операции |
 
-#### 2.1.4.8 CORS и безопасность
+**CORS и документация API**
 
-```python
-from fastapi.middleware.cors import CORSMiddleware
+Для взаимодействия с frontend-приложением подключен `CORSMiddleware`. Разрешенные источники задаются через конфигурацию, что позволяет использовать разные значения для локальной разработки и production-среды.
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,  # ["http://localhost:3000", "http://localhost:5173"]
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    max_age=3600,  # 1 час кэширования preflight
-)
-```
-
-#### 2.1.4.9 Документация API (Swagger UI)
-
-FastAPI автоматически генерирует интерактивную документацию API:
+FastAPI автоматически формирует OpenAPI-спецификацию на основе роутеров, типов параметров и `response_model`. Интерактивная документация доступна по стандартным адресам:
 
 ```
-GET /docs          # Swagger UI документация
-GET /redoc         # ReDoc документация
-GET /openapi.json  # OpenAPI спецификация
+GET /docs
+GET /redoc
+GET /openapi.json
 ```
+
+В результате REST-сервис SwipeIt представляет собой структурированный HTTP-интерфейс, который связывает frontend-приложение с серверными сценариями системы. Он использует версионирование маршрутов, строгие схемы данных, JWT-аутентификацию, централизованную обработку ошибок и автоматическую документацию. Такая организация упрощает разработку клиента, повышает надежность интеграции между слоями и оставляет пространство для дальнейшего расширения API без нарушения существующих контрактов.
 
 ---
 
