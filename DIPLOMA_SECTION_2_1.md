@@ -433,324 +433,218 @@ Middleware (промежуточное ПО) обрабатывает кажды
 
 ---
 
-### 2.1.2 Интеграция алгоритмов обработки и анализа данных
+### 2.1.2 Интеграция ML-сервиса в приложение
 
-Система использует портальный паттерн для абстрагирования ML-сервиса:
+В рамках серверной части SwipeIt ML-сервис интегрирован как отдельный компонент, отвечающий за выполнение виртуальной примерки одежды. В данном разделе рассматривается не внутренняя реализация алгоритмов машинного обучения, а способ подключения ML-модуля к основному приложению: передача входных данных, запуск фоновой обработки, сохранение результата, контроль статусов и обработка ошибок.
+
+Ключевая особенность интеграции заключается в том, что ML-обработка не выполняется непосредственно внутри HTTP-запроса. Генерация изображения является длительной и ресурсоемкой операцией, поэтому API-сервер только принимает пользовательские данные, создает сессию примерки и ставит задачу в очередь. Непосредственный запуск ML-сервиса выполняет отдельный worker-процесс. Такое разделение позволяет не блокировать web-приложение, контролировать нагрузку на вычислительные ресурсы и масштабировать обработку задач независимо от REST API.
+
+Такой подход был выбран по нескольким причинам. Во-первых, он не блокирует API-сервер во время тяжелых вычислений и позволяет клиенту получать статус задачи отдельно. Во-вторых, ML-часть изолирована от основной бизнес-логики через интерфейс `TryOnGateway`, поэтому при замене модели или способа запуска ML-сервиса не требуется переписывать слой представления. В-третьих, очередь задач, кэширование, статусы сессий и журнал событий позволяют контролировать жизненный цикл примерки, повторять неуспешные задачи и анализировать причины ошибок.
+
+Общая схема интеграции ML-сервиса представлена следующим образом:
+
+```
+frontend
+   │
+   ▼
+POST /api/v1/try-on
+   │
+   ├── validation через TryOnUseCase
+   ├── сохранение входных изображений в media storage
+   ├── создание TryOnSession и TryOnEvent
+   ├── проверка Redis cache
+   └── постановка задачи в Redis queue
+              │
+              ▼
+        tryon-worker
+              │
+              ├── загрузка изображений из storage
+              ├── запуск backend/run_tryon_job.py
+              ├── вызов OOTDService через TryOnUseCase
+              ├── получение результата от ML-сервиса
+              ├── сохранение результата в media storage
+              └── обновление статуса сессии и кэша
+```
+
+Интеграция ML-сервиса распределена между несколькими слоями серверной архитектуры:
+
+```
+presentation/api/v1/tryon.py              # HTTP API для запуска и контроля примерки
+application/dto/tryon_dto.py              # DTO запроса и ответа ML-сценария
+application/ports/tryon_gateway.py        # Абстрактный контракт ML-сервиса
+application/use_cases/tryon_use_case.py   # Бизнес-сценарий виртуальной примерки
+infrastructure/ml/ootd_service.py         # Адаптер подключения ML-сервиса
+infrastructure/queue/tryon_queue.py       # Redis-очередь задач
+infrastructure/workers/tryon_worker.py    # Фоновый обработчик ML-задач
+infrastructure/cache/tryon_cache.py       # Кэширование результатов примерки
+backend/run_tryon_job.py                  # Изолированный запуск ML-задачи
+ml/swipeit_ml/                            # Подключаемый ML-модуль
+```
+
+**Слой представления и создание задачи примерки**
+
+Точкой входа для пользователя является эндпоинт `/try-on`, который принимает два изображения: фотографию человека и изображение одежды. На уровне API выполняется чтение файлов, проверка параметров примерки, сохранение входных изображений в хранилище и создание записи сессии в базе данных. После этого API проверяет наличие готового результата в Redis-кэше. Если такой результат уже существует, сервер сразу возвращает ссылку на ранее созданное изображение. Если результата нет, создается задача для worker-а, а клиент получает идентификатор сессии и статус `QUEUED`.
+
+Фрагмент создания use case и внедрения ML-сервиса в API выглядит следующим образом:
+
+```python
+# presentation/api/v1/tryon.py
+def get_tryon_use_case() -> TryOnUseCase:
+    ml_service = get_ootd_service()
+    return TryOnUseCase(ml_service)
+```
+
+Сама постановка задачи в очередь выполняется после создания сессии и проверки кэша:
+
+```python
+task = build_tryon_task_payload(
+    session_id=session.id,
+    user_id=current_user.id,
+    avatar_media_id=avatar_media_id,
+    cloth_media_id=cloth_media_id,
+    model_type=model_type,
+    category=category,
+    scale=scale,
+    num_steps=num_steps,
+    num_samples=num_samples,
+    seed=seed,
+)
+await enqueue_tryon_task(task)
+```
+
+Этот фрагмент показывает, что API не передает в очередь сами изображения. Вместо этого в задачу помещаются идентификаторы сохраненных медиафайлов и параметры ML-задачи. Это уменьшает размер сообщений Redis, исключает дублирование бинарных данных и позволяет worker-у самостоятельно загрузить изображения из единого хранилища.
+
+**Слой приложения и контракт ML-сервиса**
+
+Слой приложения содержит DTO, порт и use case, которые описывают сценарий виртуальной примерки независимо от конкретной ML-библиотеки. DTO `TryOnRequest` хранит уже подготовленные изображения `PIL.Image` и параметры запроса, необходимые для запуска примерки. DTO `TryOnResponse` возвращает признак успешности, список результатов и их количество.
+
+Контракт между бизнес-логикой и инфраструктурой определен через протокол `TryOnGateway`:
 
 ```python
 # application/ports/tryon_gateway.py
-from abc import ABC, abstractmethod
-from app.application.dto.tryon_dto import TryOnRequest, TryOnResponse
-
-class TryOnGateway(ABC):
-    """Абстрактный портал для ML-сервиса примерки"""
-    
-    @abstractmethod
-    async def process_tryon(self, request: TryOnRequest) -> TryOnResponse:
-        """
-        Обработать запрос на виртуальную примерку
-        
-        Args:
-            request: DTO запроса с данными изображений
-            
-        Returns:
-            DTO ответа с результатом примерки
-        """
-        pass
+class TryOnGateway(Protocol):
+    def try_on(
+        self,
+        *,
+        model_image: Image.Image,
+        cloth_image: Image.Image,
+        model_type: str,
+        category: int,
+        scale: float,
+        num_steps: int,
+        num_samples: int,
+        seed: int,
+    ) -> list[Image.Image]:
+        """Run the try-on inference and return generated images."""
 ```
 
-**Реализация ML-сервиса**
-
-Конкретная реализация ML-сервиса находится в инфраструктуре:
+Use case выполняет валидацию параметров, приводит изображения к единому формату, вызывает ML-сервис через порт и кодирует полученные изображения в формат, удобный для передачи между процессами:
 
 ```python
-# infrastructure/ml/tryon_gateway.py
-from app.application.ports.tryon_gateway import TryOnGateway
-from app.application.dto.tryon_dto import TryOnRequest, TryOnResponse
-from app.infrastructure.ml.hd_tryon_service import HDTryOnService
-from app.infrastructure.ml.dc_tryon_service import DCTryOnService
+# application/use_cases/tryon_use_case.py
+results = self._ml_service.try_on(
+    model_image=model_img,
+    cloth_image=cloth_img,
+    model_type=request.model_type,
+    category=request.category,
+    scale=request.scale,
+    num_steps=request.num_steps,
+    num_samples=request.num_samples,
+    seed=request.seed,
+)
 
-class TryOnGatewayImpl(TryOnGateway):
-    def __init__(self):
-        self.hd_service = HDTryOnService()
-        self.dc_service = DCTryOnService()
-    
-    async def process_tryon(self, request: TryOnRequest) -> TryOnResponse:
-        """Обработить запрос в зависимости от типа модели"""
-        
-        # Декодирование base64 изображений
-        garment_image = self._decode_base64_image(request.garment_image)
-        person_image = self._decode_base64_image(request.person_image)
-        
-        # Выбор модели в зависимости от типа
-        if request.model_type == "hd":
-            result = await self.hd_service.process(
-                person_image, 
-                garment_image, 
-                request.category
-            )
-        elif request.model_type == "dc":
-            result = await self.dc_service.process(
-                person_image, 
-                garment_image, 
-                request.category
-            )
-        else:
-            raise ValueError(f"Unknown model type: {request.model_type}")
-        
-        # Кодирование результата в base64
-        result_base64 = self._encode_image_to_base64(result)
-        
-        return TryOnResponse(
-            result_image=result_base64,
-            model_id=request.model_id,
-            processing_time_ms=result.get('processing_time_ms'),
-            success=True
-        )
+result_urls = [self._encode_image_to_base64(img) for img in results]
 ```
 
-#### 2.1.2.3 Система управления задачами
+Благодаря такому разделению use case не зависит от того, какая именно модель используется внутри инфраструктуры. Для него ML-сервис является объектом, который принимает изображения и параметры, а возвращает список изображений результата. Это соответствует принципам чистой архитектуры, описанным в предыдущем разделе.
 
-**Очередь задач с Redis**
+**Инфраструктурный адаптер ML-сервиса**
 
-Для обработки длительных ML-операций используется Redis очередь:
+Непосредственное подключение ML-модуля выполняется в `OOTDService`. Этот класс находится в инфраструктурном слое и выступает адаптером между backend-приложением и кодом ML-сервиса. При создании сервиса путь к папке `ml` добавляется в `sys.path`, после чего backend может импортировать пакет `swipeit_ml`. Такой вариант подключения позволяет хранить ML-код в отдельном модуле проекта, но использовать его из серверной части через единый инфраструктурный интерфейс.
 
 ```python
-# infrastructure/queue/redis_client.py
-import redis
-from app.core.config import settings
+# infrastructure/ml/ootd_service.py
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+ML_ROOT = PROJECT_ROOT / "ml"
 
-redis_client = redis.from_url(settings.REDIS_URL)
-
-class TryOnTaskQueue:
-    def __init__(self):
-        self.queue_name = settings.TRYON_QUEUE_NAME
-        self.dead_letter_queue = settings.TRYON_DEAD_LETTER_QUEUE_NAME
-        self.max_retries = settings.TRYON_QUEUE_MAX_RETRIES
-    
-    async def enqueue_tryon_task(self, task_data: dict) -> str:
-        """Поместить задачу в очередь"""
-        task_id = generate_task_id()
-        task_data['task_id'] = task_id
-        task_data['retries'] = 0
-        
-        redis_client.rpush(
-            self.queue_name,
-            json.dumps(task_data)
-        )
-        
-        return task_id
-    
-    async def get_task_status(self, task_id: str) -> dict:
-        """Получить статус задачи"""
-        status_key = f"tryon:task:{task_id}:status"
-        status_data = redis_client.get(status_key)
-        
-        if status_data:
-            return json.loads(status_data)
-        return {"status": "pending"}
+if str(ML_ROOT) not in sys.path:
+    sys.path.insert(0, str(ML_ROOT))
 ```
 
-**Worker для обработки задач**
+Внутри сервиса применяется ленивая инициализация ML-компонентов. Это означает, что ресурсоемкие зависимости подготавливаются только при первом реальном обращении к сервису, а не при старте всего backend-приложения. Такой механизм уменьшает время запуска API и позволяет держать ML-зависимости на стороне worker-а.
 
-Worker-процесс обрабатывает задачи из очереди:
+Основной метод `try_on` принимает изображения и параметры от application layer, сохраняет входные изображения во временную директорию и передает управление подключенному ML-модулю. Для backend-а результатом работы сервиса является список готовых изображений, без необходимости знать детали их формирования:
+
+```python
+result = self._runner.execute(request)
+return result.outputs
+```
+
+Таким образом, инфраструктурный слой скрывает детали подключения ML-модуля. Остальные части приложения работают только с контрактом `TryOnGateway` и не зависят от конкретной структуры ML-пакета.
+
+**Фоновая обработка и изоляция ML-задач**
+
+Так как ML-сервис требует значительных вычислительных ресурсов и может использовать GPU, запуск обработки вынесен в отдельный worker. Worker постоянно читает задачи из Redis-очереди, проверяет блокировку обработки сессии, переводит сессию в статус `PROCESSING`, загружает входные изображения из хранилища и запускает отдельный процесс `backend/run_tryon_job.py`.
+
+Использование отдельного процесса решает несколько практических задач. Во-первых, тяжелые ML-зависимости и GPU-память не смешиваются с процессом API-сервера. Во-вторых, worker может корректно отменять долгие задачи по запросу пользователя. В-третьих, после завершения обработки можно очищать CUDA-кэш и снижать риск накопления памяти между задачами.
 
 ```python
 # infrastructure/workers/tryon_worker.py
-import asyncio
-import json
-from app.infrastructure.queue.redis_client import redis_client, TryOnTaskQueue
-from app.infrastructure.ml.tryon_gateway import TryOnGatewayImpl
+task = await dequeue_tryon_task()
+if task is None:
+    continue
 
-class TryOnWorker:
-    def __init__(self):
-        self.queue = TryOnTaskQueue()
-        self.ml_gateway = TryOnGatewayImpl()
-        self.processing = True
-    
-    async def run(self):
-        """Главный цикл worker-а"""
-        while self.processing:
-            try:
-                # Получить задачу из очереди
-                task_data = redis_client.blpop(
-                    self.queue.queue_name,
-                    timeout=settings.TRYON_QUEUE_BLOCK_TIMEOUT_SECONDS
-                )
-                
-                if not task_data:
-                    continue
-                
-                task_json = json.loads(task_data[1])
-                task_id = task_json['task_id']
-                
-                # Обновить статус на "processing"
-                self._update_task_status(task_id, "processing")
-                
-                # Обработить задачу
-                result = await self.ml_gateway.process_tryon(task_json)
-                
-                # Сохранить результат
-                self._save_result(task_id, result)
-                self._update_task_status(task_id, "completed")
-                
-            except Exception as e:
-                self._handle_task_error(task_json, e)
-    
-    def _handle_task_error(self, task_data: dict, error: Exception):
-        """Обработить ошибку задачи с повторами"""
-        retries = task_data.get('retries', 0)
-        
-        if retries < self.queue.max_retries:
-            # Поместить задачу обратно в очередь
-            task_data['retries'] = retries + 1
-            redis_client.rpush(self.queue.queue_name, json.dumps(task_data))
-        else:
-            # Переместить в dead-letter очередь
-            redis_client.rpush(
-                self.queue.dead_letter_queue,
-                json.dumps({**task_data, 'error': str(error)})
-            )
+await process_tryon_task(task)
 ```
 
-#### 2.1.2.4 Кэширование результатов
+Внутри обработки задачи worker выполняет полный жизненный цикл операции: получает медиафайлы, проверяет кэш, вызывает ML-сервис, сохраняет результат и обновляет статус сессии:
 
-Система кэширует результаты примерки для одинаковых входных данных:
+```python
+result = await _execute_tryon_job(
+    {
+        "model_bytes": model_bytes,
+        "cloth_bytes": cloth_bytes,
+        "model_type": str(task["model_type"]),
+        "category": int(task["category"]),
+        "scale": float(task["scale"]),
+        "num_steps": int(task["num_steps"]),
+        "num_samples": int(task["num_samples"]),
+        "seed": int(task["seed"]),
+    },
+    session_id=session_id,
+)
+```
+
+Отдельный файл `run_tryon_job.py` является тонкой прослойкой между worker-ом и use case примерки. Он получает путь к JSON-файлу с параметрами, загружает изображения через Pillow, формирует `TryOnRequest`, вызывает `TryOnUseCase(get_ootd_service())` и записывает результат в JSON-файл. Такой способ упрощает обмен данными между процессами и позволяет worker-у контролировать stdout, stderr, код завершения и отмену задачи, не смешивая управление задачей с внутренней логикой ML-модуля.
+
+**Кэширование результатов**
+
+Для одинаковых входных изображений и одинаковых параметров запроса система использует Redis-кэш. Ключ кэша формируется на основе содержимого двух изображений и JSON-представления параметров обработки. В отличие от кэширования только по идентификаторам файлов, такой подход учитывает фактическое содержимое данных и настройки запроса.
 
 ```python
 # infrastructure/cache/tryon_cache.py
-import hashlib
-import json
-from app.infrastructure.queue.redis_client import redis_client
-from app.core.config import settings
-
-class TryOnCache:
-    def __init__(self):
-        self.ttl = settings.TRYON_CACHE_TTL_SECONDS
-        self.prefix = "tryon:cache"
-    
-    def _generate_cache_key(self, garment_id: int, person_id: int, 
-                           category: int, model_type: str) -> str:
-        """Сгенерировать ключ кэша на основе входных данных"""
-        key_data = f"{garment_id}:{person_id}:{category}:{model_type}"
-        key_hash = hashlib.md5(key_data.encode()).hexdigest()
-        return f"{self.prefix}:{key_hash}"
-    
-    async def get(self, garment_id: int, person_id: int, 
-                 category: int, model_type: str) -> dict | None:
-        """Получить результат из кэша"""
-        cache_key = self._generate_cache_key(
-            garment_id, person_id, category, model_type
-        )
-        cached_data = redis_client.get(cache_key)
-        
-        if cached_data:
-            return json.loads(cached_data)
-        return None
-    
-    async def set(self, garment_id: int, person_id: int, 
-                 category: int, model_type: str, result: dict):
-        """Сохранить результат в кэш"""
-        cache_key = self._generate_cache_key(
-            garment_id, person_id, category, model_type
-        )
-        redis_client.setex(
-            cache_key,
-            self.ttl,
-            json.dumps(result)
-        )
+digest = hashlib.sha256()
+digest.update(payload)
+digest.update(model_bytes)
+digest.update(cloth_bytes)
+return f"tryon:result:{digest.hexdigest()}"
 ```
 
-#### 2.1.2.5 Обработка изображений
+Кэш проверяется дважды: сначала в API-эндпоинте, чтобы сразу вернуть результат пользователю без постановки задачи в очередь, а затем в worker-е, чтобы избежать повторной ML-обработки в случае, если похожая задача уже была обработана другим процессом. В кэше сохраняются ссылки на результаты и идентификатор итогового медиафайла, поэтому клиент получает обычную ссылку на изображение через media API.
 
-Система использует Pillow для предварительной обработки изображений:
+**Статусы, события и обработка ошибок**
 
-```python
-# infrastructure/ml/image_processor.py
-from PIL import Image
-import io
-import base64
+Жизненный цикл ML-задачи фиксируется в базе данных через сущности сессии и событий. Сессия хранит текущий статус примерки (`QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`, `CANCELED`) и ссылку на итоговое изображение. События позволяют восстановить историю обработки: постановку в очередь, начало выполнения, повторную попытку, успешное завершение, отмену или перевод задачи в dead-letter очередь.
 
-class ImageProcessor:
-    @staticmethod
-    def decode_base64_image(image_base64: str) -> Image.Image:
-        """Декодировать base64 строку в PIL Image"""
-        image_data = base64.b64decode(image_base64)
-        image = Image.open(io.BytesIO(image_data))
-        return image
-    
-    @staticmethod
-    def encode_image_to_base64(image: Image.Image) -> str:
-        """Кодировать PIL Image в base64 строку"""
-        buffered = io.BytesIO()
-        image.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode()
-    
-    @staticmethod
-    def resize_image(image: Image.Image, max_width: int = 1024, 
-                    max_height: int = 1024) -> Image.Image:
-        """Ресайзировать изображение"""
-        image.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-        return image
-    
-    @staticmethod
-    def validate_image(image: Image.Image) -> bool:
-        """Проверить валидность изображения"""
-        if image.mode not in ('RGB', 'RGBA', 'L'):
-            image = image.convert('RGB')
-        return True
-```
+Для повышения надежности worker использует Redis-блокировку обработки сессии, механизм heartbeat, повторные попытки и dead-letter очередь. Если ошибка считается временной, задача возвращается в очередь с увеличенным номером попытки. Если ошибка является невосстановимой, например связана с отсутствием файла модели или нехваткой GPU-памяти, задача переносится в dead-letter очередь, а сессия помечается как `FAILED`. Такой механизм предотвращает бесконечные повторы и сохраняет диагностическую информацию для последующего анализа.
 
-#### 2.1.2.6 Обработка ошибок при ML-обработке
+Пользователь также может отменить сессию примерки. В этом случае API устанавливает Redis-флаг отмены, а worker во время выполнения периодически проверяет этот флаг и завершает дочерний процесс ML-обработки. После отмены сессия переводится в статус `CANCELED`, а временные runtime-артефакты очищаются.
 
-```python
-# infrastructure/ml/exceptions.py
-class MLProcessingError(Exception):
-    """Общая ошибка ML-обработки"""
-    pass
+**Проверка готовности ML-сервиса**
 
-class ModelNotFoundError(MLProcessingError):
-    """ML-модель не найдена"""
-    pass
+Для эксплуатационного контроля в ML-адаптере предусмотрен `health_check`, который возвращает статус сервиса, идентификатор GPU, доступность CUDA, имя видеокарты и фактический runtime device. Эти данные используются в health endpoints и позволяют быстро определить, готов ли worker к выполнению ML-задач.
 
-class ImageProcessingError(MLProcessingError):
-    """Ошибка при обработке изображения"""
-    pass
-
-class TimeoutError(MLProcessingError):
-    """Превышено время обработки"""
-    pass
-
-# Обработчик в use case
-class TryOnUseCase:
-    async def execute(self, request: TryOnRequest) -> TryOnResponse:
-        try:
-            # Валидация
-            self.validate(request)
-            
-            # Проверка кэша
-            cached = await self.cache.get(...)
-            if cached:
-                return cached
-            
-            # Обработка
-            result = await self.ml_service.process_tryon(request)
-            
-            # Кэширование
-            await self.cache.set(...)
-            
-            return result
-            
-        except ImageProcessingError as e:
-            logger.error(f"Image processing failed: {e}")
-            raise HTTPException(status_code=400, detail="Invalid image")
-        except TimeoutError as e:
-            logger.error(f"ML processing timeout: {e}")
-            raise HTTPException(status_code=504, detail="Processing timeout")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
-```
+В результате ML-сервис интегрирован в приложение не как отдельный изолированный скрипт, а как полноценная часть серверной архитектуры. API отвечает за прием пользовательских данных и создание управляемой сессии, application layer описывает бизнес-сценарий через use case и порт, infrastructure layer обеспечивает очередь, кэш, хранилище и адаптер подключения ML-сервиса, а отдельный worker выполняет ресурсоемкую обработку без блокировки основного web-приложения. Такая организация делает интеграцию масштабируемой, тестируемой и устойчивой к ошибкам, сохраняя возможность дальнейшей замены ML-модели или изменения способа ее развертывания.
 
 ---
 
@@ -2054,7 +1948,7 @@ async def test_create_garment(db: AsyncSession):
 
 1. **Архитектура на основе Clean Architecture** обеспечивает четкое разделение ответственности и упрощает масштабирование
 2. **Использование современного стека технологий** (FastAPI, SQLAlchemy, Redis, S3) позволяет построить высокопроизводительное приложение
-3. **Интеграция ML-алгоритмов** через портальный паттерн позволяет асинхронно обрабатывать сложные вычисления
+3. **Интеграция ML-сервиса** через портальный паттерн, очередь задач и worker-процесс позволяет выполнять ресурсоемкую обработку асинхронно
 4. **REST API** соответствует лучшим практикам и обеспечивает удобный интерфейс для клиентов
 5. **Организация репозитория** позволяет команде эффективно работать над разными компонентами системы
 
