@@ -1211,515 +1211,216 @@ GET /openapi.json
 
 ### 2.1.5 Организация структуры репозитория и конфигурации проекта
 
-#### 2.1.5.1 Структура репозитория
+Проект SwipeIt организован как единый monorepo, в котором рядом находятся серверная часть, frontend-приложение, ML-модуль, batch-процессы, инфраструктурные файлы и проектная документация. Такой подход выбран потому, что основные компоненты системы тесно связаны между собой: backend использует ML-модуль для виртуальной примерки, frontend обращается к REST API backend-а, batch-задачи используют ту же инфраструктуру данных, а docker-compose и CI/CD должны запускать все эти части согласованно.
+
+Единый репозиторий упрощает разработку MVP: изменения в API, UI, ML-интеграции, тестах и деплой-конфигурации можно проводить в рамках одной ветки и одного pull request. При этом внутри репозитория сохранено разделение ответственности: каждый крупный компонент имеет собственную структуру, зависимости, тесты и конфигурацию качества кода.
+
+**Структура репозитория**
+
+На верхнем уровне репозитория находятся общие файлы проекта: документация, docker-compose, шаблоны переменных окружения, конфигурация CI/CD и изображения для дипломной работы. Основные директории отражают архитектурные границы системы:
 
 ```
 Diplom/
-├── README.md                  # Описание проекта
-├── Config.py                  # Конфигурация проекта
-├── requirements.txt           # Зависимости Python (общие)
-├── environment.yml            # Conda окружение
-├── docker-compose.yml         # Основной docker-compose
-├── docker-compose.gpu.yml     # Docker-compose с GPU поддержкой
-│
-├── backend/                   # Серверная часть
-│   ├── Dockerfile            # Docker для сервера
-│   ├── pyproject.toml        # Конфигурация зависимостей
-│   ├── requirements-test.txt # Тестовые зависимости
-│   ├── pytest.ini            # Конфигурация pytest
-│   ├── coverage.xml          # Отчет тестового покрытия
-│   ├── alembic.ini           # Конфигурация Alembic
-│   ├── run_server.py         # Запуск FastAPI сервера
-│   ├── run_migrations.py     # Запуск миграций БД
-│   ├── run_tryon_job.py      # Запуск периодической задачи примерки
-│   ├── run_tryon_worker.py   # Запуск worker-а для примерки
-│   │
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py           # Главная точка входа
-│   │   ├── api/               # API层
-│   │   ├── application/       # Бизнес-логика
-│   │   ├── core/              # Ядро (конфиг, ошибки)
-│   │   ├── domain/            # Бизнес-сущности
-│   │   ├── infrastructure/    # Инфраструктура
-│   │   ├── models/            # SQLAlchemy модели
-│   │   ├── presentation/      # Слой представления
-│   │   ├── repositories/      # Data access
-│   │   └── schemas/           # Pydantic схемы
-│   │
-│   ├── alembic/               # Миграции БД
-│   │   ├── env.py
-│   │   ├── versions/
-│   │   └── script.py.mako
-│   │
-│   ├── tests/                 # Unit тесты
-│   │   ├── test_api.py
-│   │   ├── test_use_cases.py
-│   │   └── test_repositories.py
-│   │
-│   └── htmlcov/               # Отчет покрытия кода
-│
-├── frontend/                  # Фронтенд часть
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── jsconfig.json
-│   ├── public/
-│   ├── src/
-│   ├── build/
-│   ├── coverage/
-│   └── nginx/
-│
-├── ml/                        # ML модули
-│   ├── pyproject.toml
-│   ├── requirements.txt
-│   ├── requirements-test.txt
-│   ├── swipeit_ml/            # ML код
-│   │   ├── models/
-│   │   ├── preprocessing/
-│   │   ├── training/
-│   │   └── inference/
-│   ├── checkpoints/           # Обученные модели
-│   ├── scripts/               # Скрипты обучения
-│   ├── tests/
-│   └── examples/
-│
-├── batch/                     # Batch обработка
-│   ├── Dockerfile
-│   ├── airflow/               # Airflow DAG-и
-│   └── swipeit_daily_metrics_job.py
-│
-├── docs/                      # Документация
-│   └── secret-store.md
-│
-├── image/                     # Изображения и ассеты
-│   ├── logo/
-│   └── screenshots/
-│
-└── scripts/                   # Утилиты и скрипты
-    └── data/
+├── backend/                    # FastAPI, use cases, инфраструктура, миграции и worker
+├── frontend/                   # React-приложение, nginx-конфигурация и frontend-тесты
+├── ml/                         # ML-модуль, third_party код, тесты и демонстрационные материалы
+├── batch/                      # Airflow и batch-обработка аналитических метрик
+├── docs/                       # Документация по эксплуатационным процессам
+├── image/                      # Изображения для README и дипломной документации
+├── .github/workflows/          # CI/CD pipelines
+├── docker-compose.yml          # Основной состав сервисов
+├── docker-compose.gpu.yml      # GPU-overrides для try-on worker-а
+├── .env.example                # Шаблон переменных окружения
+├── Config.py                   # Общая конфигурация проекта
+├── ML_System_Design_Doc_Template.md
+└── DIPLOMA_SECTION_2_1.md
 ```
 
-#### 2.1.5.2 Конфигурация проекта (Config.py)
+Внутри `backend/` структура соответствует слоям Clean Architecture, описанным ранее. Папка `app/presentation` содержит REST API, `app/application` - use cases и DTO, `app/domain` - доменные перечисления и сущности, `app/infrastructure` - адаптеры к базе данных, Redis, S3, ML-сервису и worker-процессам. Отдельно вынесены `alembic/` для миграций, `tests/` для автоматизированных тестов и скрипты запуска `run_server.py`, `run_tryon_worker.py`, `run_tryon_job.py`.
 
-Главный файл конфигурации централизует все настройки для разных частей проекта:
+В `frontend/` находится React-приложение, разделенное на страницы, сервисы работы с API, конфигурацию, утилиты и публичные ассеты. В `ml/` расположен пакет `swipeit_ml`, инфраструктурные адаптеры ML-модуля, third-party зависимости модели и отдельный набор unit/integration тестов. Директория `batch/airflow` содержит Airflow DAG для ежедневной аналитики, а `backend/batch` - код batch-задачи, который может собираться и деплоиться отдельным Docker-образом.
 
-```python
-# Config.py
-import os
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional
-from pydantic import AnyUrl, BaseSettings
+**ML design document**
 
-ROOT_DIR = Path(__file__).resolve().parent
-ENV_FILE = ROOT_DIR / ".env"
+Для ML-части проекта составлен отдельный документ `ML_System_Design_Doc_Template.md`. Он фиксирует продуктовые предпосылки, бизнес-требования, ограничения, постановку ML-задачи, этапы Data Science работ, подготовку пилота, требования к production-системе и критерии успешности. Наличие такого документа важно, потому что ML-модуль имеет собственный жизненный цикл: анализ данных, выбор подхода, оценка качества, пилотирование и последующая эксплуатация.
 
-class BackendSettings(BaseSettings):
-    """Конфигурация серверной части"""
-    
-    # API
-    API_V1: str = "/api/v1"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")
-    
-    # Database
-    DB_URL: AnyUrl = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/swipeit")
-    DB_ASYNC_URL: AnyUrl | None = None
-    
-    @property
-    def async_database_url(self) -> str:
-        if self.DB_ASYNC_URL:
-            return str(self.DB_ASYNC_URL)
-        return str(self.DB_URL).replace("postgresql://", "postgresql+asyncpg://")
-    
-    # S3 Storage
-    S3_ENDPOINT: str = os.getenv("S3_ENDPOINT", "http://localhost:9000")
-    S3_ACCESS_KEY: str = os.getenv("S3_ACCESS_KEY", "minioadmin")
-    S3_SECRET_KEY: str = os.getenv("S3_SECRET_KEY", "minioadmin")
-    S3_BUCKET_NAME: str = os.getenv("S3_BUCKET_NAME", "swipeit-media")
-    S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
-    S3_SECURE: bool = os.getenv("S3_SECURE", "false").lower() == "true"
-    S3_PUBLIC_URL: Optional[str] = os.getenv("S3_PUBLIC_URL")
-    
-    # Redis
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    
-    # Try-On Configuration
-    TRYON_CACHE_TTL_SECONDS: int = int(os.getenv("TRYON_CACHE_TTL_SECONDS", 86400))
-    TRYON_QUEUE_NAME: str = os.getenv("TRYON_QUEUE_NAME", "tryon:queue")
-    TRYON_DEAD_LETTER_QUEUE_NAME: str = os.getenv("TRYON_DEAD_LETTER_QUEUE_NAME", "tryon:dead-letter")
-    TRYON_QUEUE_BLOCK_TIMEOUT_SECONDS: int = int(os.getenv("TRYON_QUEUE_BLOCK_TIMEOUT_SECONDS", 5))
-    TRYON_QUEUE_MAX_RETRIES: int = int(os.getenv("TRYON_QUEUE_MAX_RETRIES", 2))
-    TRYON_RATE_LIMIT_REQUESTS: int = int(os.getenv("TRYON_RATE_LIMIT_REQUESTS", 5))
-    TRYON_RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("TRYON_RATE_LIMIT_WINDOW_SECONDS", 60))
-    TRYON_RETENTION_DAYS: int = int(os.getenv("TRYON_RETENTION_DAYS", 7))
-    
-    # CORS
-    CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    
-    # Authentication
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
-    
-    class Config:
-        env_file = str(ENV_FILE)
-        env_file_encoding = "utf-8"
+Документ отделяет описание ML-решения от описания backend-интеграции. В разделе 2.1 серверной части рассматривается то, как приложение вызывает ML-сервис, хранит результаты и управляет задачами, а ML System Design Doc отвечает на вопросы, почему выбран конкретный подход, какие данные используются, как оценивается качество и какие ограничения существуют у модели.
 
-@dataclass(frozen=True)
-class FrontendSettings:
-    """Конфигурация фронтенд части"""
-    app_name: str = "SwipeIt"
-    api_base_url: str = os.getenv("API_BASE_URL", "http://localhost:8000")
-    use_mock_data: bool = os.getenv("USE_MOCK_DATA", "false").lower() == "true"
-    mock_delay_ms: int = int(os.getenv("MOCK_DELAY_MS", 300))
+Фрагмент структуры ML design document:
 
-@dataclass(frozen=True)
-class MLSettings:
-    """Конфигурация ML части"""
-    model_checkpoint_path: str = os.getenv(
-        "MODEL_CHECKPOINT_PATH",
-        "checkpoints/tryon_model.pth"
-    )
-    device: str = os.getenv("ML_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
-    batch_size: int = int(os.getenv("ML_BATCH_SIZE", 8))
-    num_workers: int = int(os.getenv("ML_NUM_WORKERS", 4))
-
-class ProjectConfig:
-    def __init__(self):
-        self.backend = BackendSettings()
-        self.frontend = FrontendSettings()
-        self.ml = MLSettings()
-
-def load_project_config() -> ProjectConfig:
-    """Загрузить конфигурацию проекта"""
-    return ProjectConfig()
+```
+ML_System_Design_Doc_Template.md
+├── 1. Цели и предпосылки
+├── 2. Методология Data Scientist
+├── 3. Подготовка пилота
+├── 4. Внедрение для production-систем
+└── 5. Мониторинг и эксплуатация
 ```
 
-#### 2.1.5.3 Docker компоновка
+Такой документ выполняет роль инженерного контракта между продуктовой частью, backend-разработкой и ML-разработкой. Он позволяет не смешивать детали алгоритмов с описанием REST API и инфраструктуры, но при этом сохраняет общую трассируемость решения.
 
-**docker-compose.yml** - основной docker-compose для разработки:
+**Конфигурация проекта**
+
+Конфигурация разделена между общим файлом `Config.py`, backend-настройками, frontend-переменными и `.env`-файлами. В репозитории хранится только `.env.example`, а реальные значения передаются локально или через GitHub Secrets. Это позволяет запускать проект в разных окружениях без изменения исходного кода.
 
 ```yaml
-version: '3.8'
-
-services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: swipeit-postgres
-    environment:
-      POSTGRES_DB: swipeit
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: swipeit-redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # MinIO S3 Storage
-  minio:
-    image: minio/minio:latest
-    container_name: swipeit-minio
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # FastAPI Backend
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: swipeit-backend
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/swipeit
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: minioadmin
-      S3_SECRET_KEY: minioadmin
-      S3_BUCKET_NAME: swipeit-media
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: python run_server.py
-
-  # React Frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: swipeit-frontend
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000
-    volumes:
-      - ./frontend:/app
-
-volumes:
-  postgres_data:
-  minio_data:
+# docker-compose.yml
+environment:
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+  DB_URL: ${DOCKER_DB_URL:-postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/swipeit}
+  REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
+  S3_ENDPOINT: ${DOCKER_S3_ENDPOINT:-http://minio:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
 ```
 
-**docker-compose.gpu.yml** - для обучения ML моделей с GPU:
+Такой формат делает обязательные секреты явными: если, например, `SECRET_KEY` или `POSTGRES_PASSWORD` не заданы, docker-compose не запустит сервис с небезопасными значениями по умолчанию. Для frontend предусмотрен отдельный `frontend/.env.example`, а для Airflow - `batch/airflow/.env.example`.
+
+**Тестирование**
+
+В проекте используется несколько независимых тестовых контуров. Backend-тесты проверяют REST-схемы, безопасность, работу с S3, кэширование, очереди примерки, восстановление зависших задач, dead-letter обработку, репозитории и use case виртуальной примерки. ML-тесты разделены на unit и integration и проверяют прикладные сервисы, адаптеры и entrypoints ML-модуля. Frontend-тесты проверяют конфигурацию, сервисы и утилиты пользовательского интерфейса.
+
+```
+backend/tests/
+├── test_errors_and_config.py
+├── test_hashing_and_security.py
+├── test_health_endpoints.py
+├── test_s3_client.py
+├── test_tryon_queue.py
+├── test_tryon_cache.py
+├── test_tryon_recovery.py
+└── ...
+
+ml/tests/
+├── unit/
+└── integration/
+
+frontend/src/
+├── config/*.test.js
+├── services/*.test.js
+└── utils/*.test.js
+```
+
+CI запускает тесты автоматически и собирает отчеты покрытия. Для backend используется `pytest` с `pytest-cov`, для ML - `pytest` с порогом покрытия, для frontend - `npm run test:coverage`. Отчеты сохраняются как artifacts GitHub Actions, что позволяет анализировать покрытие после каждого запуска pipeline.
+
+```bash
+uv run pytest --cov=app --cov-config=.coveragerc
+python -m pytest tests/unit tests/integration --cov=swipeit_ml --cov-fail-under=70
+npm run test:coverage -- --watch=false
+```
+
+**Линтеры и контроль качества кода**
+
+Для Python-кода backend-а и ML-модуля настроен единый набор инструментов качества: `black`, `isort`, `flake8`, `pylint` и `mypy`. Backend хранит настройки в `backend/pyproject.toml` и `backend/.flake8`, ML-модуль - в `ml/pyproject.toml` и `ml/.flake8`. В обоих случаях используется длина строки 120 символов, форматирование в стиле Black и статическая проверка типов для ключевых модулей.
+
+```toml
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+py_version = 310
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+```
+
+В CI также есть отдельная проверка на запрет inline-исключений линтеров (`noqa`, `pylint: disable`, `type: ignore`). Это сделано для того, чтобы технический долг не скрывался в коде точечными подавлениями правил, а исправлялся явно или оформлялся в общей конфигурации.
 
 ```yaml
-version: '3.8'
-
-services:
-  ml-training:
-    build:
-      context: ./ml
-      dockerfile: Dockerfile
-    container_name: swipeit-ml-training
-    environment:
-      CUDA_VISIBLE_DEVICES: "0"
-      ML_DEVICE: cuda
-    ports:
-      - "6006:6006"  # TensorBoard
-    volumes:
-      - ./ml:/workspace
-      - ml_cache:/root/.cache
-    stdin_open: true
-    tty: true
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-volumes:
-  ml_cache:
+- name: Validate no inline linter suppressions
+  run: |
+    if grep -R -nE "noqa|pylint:[[:space:]]*disable|type:[[:space:]]*ignore" app; then
+      echo "Inline linter suppressions are not allowed."
+      exit 1
+    fi
 ```
 
-#### 2.1.5.4 Миграции БД (Alembic)
+Frontend использует стандартный набор `react-scripts` для тестирования и сборки. В `package.json` задан порог покрытия 70% по branches, functions, lines и statements, что делает тесты не только формальной проверкой запуска, но и инструментом контроля качества.
 
-Система использует Alembic для версионирования схемы БД:
+**CI/CD и деплой**
 
-```bash
-# alembic/versions/001_initial.py
-from alembic import op
-import sqlalchemy as sa
+Автоматизация проекта построена на GitHub Actions. Основной workflow `.github/workflows/ci.yml` запускается на push и pull request для всех веток. Он включает линтеры backend-а, smoke-проверку Airflow, линтеры ML-модуля, ML-тесты, backend-тесты, frontend-тесты и итоговую публикацию coverage summary.
 
-def upgrade():
-    op.create_table(
-        'users',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('email', sa.String(255), unique=True, nullable=False),
-        sa.Column('username', sa.String(100), unique=True, nullable=False),
-        sa.Column('hashed_password', sa.String(255), nullable=False),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-        sa.Column('updated_at', sa.DateTime(), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        sa.Index('ix_users_email', 'email'),
-        sa.Index('ix_users_username', 'username'),
-    )
-
-def downgrade():
-    op.drop_table('users')
+```yaml
+jobs:
+  backend-lint:
+  airflow-smoke:
+  ml-lint:
+  ml-tests:
+  backend-tests:
+  frontend-tests:
+  coverage-summary:
 ```
 
-**Команды для работы с миграциями**:
+Для деплоя используются отдельные workflows:
 
-```bash
-# Создать новую миграцию
-alembic revision --autogenerate -m "Add users table"
-
-# Применить миграции
-alembic upgrade head
-
-# Откатить миграцию
-alembic downgrade -1
-
-# Просмотреть текущую версию
-alembic current
+```
+.github/workflows/deploy-backend.yml    # backend + batch images + remote deploy
+.github/workflows/deploy-frontend.yml   # frontend image + remote deploy
 ```
 
-#### 2.1.5.5 Переменные окружения (.env)
+Backend workflow собирает Docker-образы `diplom-backend` и `diplom-batch`, публикует их в GitHub Container Registry и затем подключается к серверу по SSH. На сервере workflow формирует runtime `.env`, выполняет login в GHCR, подтягивает образы и перезапускает сервисы через `docker compose`. Frontend workflow работает аналогично: собирает образ `diplom-frontend`, публикует его в GHCR и обновляет контейнер frontend-а на сервере.
 
-```bash
-# .env (не добавляется в git)
+Основной `docker-compose.yml` описывает состав production-like окружения:
 
-# Backend
-SECRET_KEY=your-secret-key-here
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/swipeit
-REDIS_URL=redis://localhost:6379/0
-
-# S3 Storage
-S3_ENDPOINT=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
-S3_BUCKET_NAME=swipeit-media
-
-# Try-On Settings
-TRYON_CACHE_TTL_SECONDS=86400
-TRYON_RATE_LIMIT_REQUESTS=5
-TRYON_RATE_LIMIT_WINDOW_SECONDS=60
-
-# Frontend
-VITE_API_BASE_URL=http://localhost:8000
-
-# ML Settings
-ML_DEVICE=cuda
-MODEL_CHECKPOINT_PATH=checkpoints/tryon_model.pth
+```
+frontend      # React-приложение под nginx
+backend       # FastAPI REST API
+tryon-worker  # обработчик задач виртуальной примерки
+postgres      # основная БД
+minio         # S3-совместимое хранилище медиа
+redis         # очередь, кэш и runtime-состояния
 ```
 
-#### 2.1.5.6 Скрипты запуска
+Для GPU-сценариев используется `docker-compose.gpu.yml`, который переопределяет настройки backend-а и worker-а: включает `ML_DEVICE=cuda`, `TRYON_REQUIRE_CUDA=true`, `NVIDIA_VISIBLE_DEVICES`, `gpus` и NVIDIA runtime. Это позволяет запускать обычную версию проекта на CPU, а ML-обработку на сервере с GPU без дублирования всего compose-файла.
 
-**run_server.py** - запуск FastAPI сервера:
-
-```python
-#!/usr/bin/env python3
-"""Запуск FastAPI сервера"""
-
-import uvicorn
-from app.core.config import settings
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,  # Перезагрузка при изменении кода (только для разработки)
-        log_level="info",
-    )
+```yaml
+# docker-compose.gpu.yml
+tryon-worker:
+  environment:
+    ML_DEVICE: ${ML_DEVICE:-cuda}
+    TRYON_REQUIRE_CUDA: ${TRYON_REQUIRE_CUDA:-true}
+    NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+  gpus: ${TRYON_GPUS:-all}
+  runtime: ${TRYON_RUNTIME:-nvidia}
 ```
 
-**run_migrations.py** - применить миграции:
+**Работа с секретами**
 
-```python
-#!/usr/bin/env python3
-"""Применить миграции БД"""
+Секреты проекта не хранятся в исходном коде. Для локального запуска используются `.env` и `batch/airflow/.env`, которые не должны попадать в git. Для CI/CD секреты задаются в GitHub Actions Secrets. Правила работы с секретами вынесены в отдельный документ `docs/secret-store.md`.
 
-from alembic.config import Config
-from alembic.command import upgrade
-import sys
+Основные места хранения:
 
-def run_migrations():
-    alembic_cfg = Config("alembic.ini")
-    upgrade(alembic_cfg, "head")
-
-if __name__ == "__main__":
-    run_migrations()
+```
+.env                         # локальные backend/docker-compose секреты
+batch/airflow/.env           # локальные Airflow секреты
+GitHub Actions Secrets       # секреты CI/CD и деплоя
+docs/secret-store.md         # правила и список необходимых секретов
 ```
 
-**run_tryon_worker.py** - запуск worker-а для обработки примерок:
+К обязательным секретам относятся `SECRET_KEY`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`. Для деплоя дополнительно используются `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`, `GHCR_USERNAME`, `GHCR_READ_TOKEN` и другие параметры окружения. В workflow секреты передаются только на этапе runtime/deploy, а не на этапе сборки Docker-образа.
 
-```python
-#!/usr/bin/env python3
-"""Запуск worker-а для обработки задач примерки"""
+Фрагмент передачи секретов в deploy workflow:
 
-import asyncio
-from app.infrastructure.workers.tryon_worker import TryOnWorker
-
-async def main():
-    worker = TryOnWorker()
-    print("Starting Try-On Worker...")
-    await worker.run()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+```yaml
+env:
+  DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+  GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+  GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+  SECRET_KEY: ${{ secrets.SECRET_KEY }}
+  POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+  S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+  S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
 ```
 
-#### 2.1.5.7 Тестирование (pytest)
+Документ `docs/secret-store.md` также фиксирует правила: не писать реальные секреты в `.env.example`, README и compose-файлы; добавлять новый секрет одновременно в шаблон окружения и GitHub Secrets; передавать чувствительные значения только на этапе выполнения; не использовать небезопасные значения вроде `admin` для Airflow.
 
-**pytest.ini** - конфигурация pytest:
-
-```ini
-[pytest]
-pythonpath = .
-testpaths = tests
-python_files = test_*.py
-python_classes = Test*
-python_functions = test_*
-addopts = 
-    --verbose
-    --cov=app
-    --cov-report=html
-    --cov-report=term-missing
-markers =
-    unit: Unit tests
-    integration: Integration tests
-    slow: Slow tests
-```
-
-**Пример unit теста**:
-
-```python
-# tests/test_repositories.py
-import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.infrastructure.persistence.repositories.garment_repo import GarmentRepository
-from app.presentation.api.schemas.garment import GarmentCreate
-
-@pytest.mark.asyncio
-async def test_create_garment(db: AsyncSession):
-    """Тест создания вещи"""
-    repo = GarmentRepository()
-    garment_data = GarmentCreate(
-        name="Blue Shirt",
-        category="tops",
-        user_id=1
-    )
-    
-    garment = await repo.create(db, obj_in=garment_data)
-    
-    assert garment.id is not None
-    assert garment.name == "Blue Shirt"
-    assert garment.category == "tops"
-```
-
-#### 2.1.5.8 Лучшие практики организации кода
-
-1. **Разделение ответственности**: каждый модуль отвечает за одну задачу
-2. **DRY (Don't Repeat Yourself)**: переиспользование кода через базовые классы
-3. **SOLID принципы**: особенно инверсия зависимостей через ports
-4. **Асинхронность**: все операции I/O выполняются асинхронно
-5. **Типизация**: использование type hints для всех функций
-6. **Тестируемость**: слабая связанность компонентов для легкого тестирования
-7. **Документирование**: docstrings для всех public функций и классов
+В результате структура репозитория и конфигурация проекта организованы так, чтобы поддерживать полный жизненный цикл разработки: локальный запуск, документирование ML-решения, автоматическое тестирование, статический анализ, сборку Docker-образов, деплой на сервер и безопасное управление секретами. Такая организация снижает риск рассинхронизации между backend, frontend и ML-компонентами и делает проект удобным для сопровождения.
 
 ---
 
