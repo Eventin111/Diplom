@@ -162,10 +162,6 @@ infrastructure/
 ├── db/
 │   ├── db.py                 # Конфигурация БД
 │   └── schema_compat.py      # Миграции схемы
-├── ml/
-│   ├── hd_tryon_service.py   # HD модель для примерки
-│   ├── dc_tryon_service.py   # DC модель для примерки
-│   └── tryon_gateway.py      # Реализация портала ML
 ├── persistence/
 │   ├── models/               # SQLAlchemy модели
 │   │   ├── user.py
