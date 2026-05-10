@@ -1226,14 +1226,11 @@ Diplom/
 ├── ml/                         # ML-модуль, third_party код, тесты и демонстрационные материалы
 ├── batch/                      # Airflow и batch-обработка аналитических метрик
 ├── docs/                       # Документация по эксплуатационным процессам
-├── image/                      # Изображения для README и дипломной документации
 ├── .github/workflows/          # CI/CD pipelines
 ├── docker-compose.yml          # Основной состав сервисов
 ├── docker-compose.gpu.yml      # GPU-overrides для try-on worker-а
-├── .env.example                # Шаблон переменных окружения
 ├── Config.py                   # Общая конфигурация проекта
 ├── ML_System_Design_Doc_Template.md
-└── DIPLOMA_SECTION_2_1.md
 ```
 
 Внутри `backend/` структура соответствует слоям Clean Architecture, описанным ранее. Папка `app/presentation` содержит REST API, `app/application` - use cases и DTO, `app/domain` - доменные перечисления и сущности, `app/infrastructure` - адаптеры к базе данных, Redis, S3, ML-сервису и worker-процессам. Отдельно вынесены `alembic/` для миграций, `tests/` для автоматизированных тестов и скрипты запуска `run_server.py`, `run_tryon_worker.py`, `run_tryon_job.py`.
