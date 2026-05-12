@@ -3,10 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import ProfilePage from '../ProfilePage/ProfilePage';
 import SearchPage from '../SearchPage/SearchPage';
 import ChatPage from '../ChatPage/ChatPage';
-import MusicTicker from '../../components/MusicTicker/MusicTicker';
+import { useAuth } from '../../hooks/useAuth';
 import { likeFeedItem } from '../../core/application/usecases/likeFeedItem';
 import { unlikeFeedItem } from '../../core/application/usecases/unlikeFeedItem';
 import { createApiFeedRepository } from '../../core/infrastructure/repositories/apiFeedRepository';
+import { createApiUserRepository } from '../../core/infrastructure/repositories/apiUserRepository';
+import { createApiWardrobeRepository } from '../../core/infrastructure/repositories/apiWardrobeRepository';
+import { appConfig } from '../../config/appConfig';
 import feedIcon from '../../assets/icons/feed.png';
 import searchIcon from '../../assets/icons/search.png';
 import profileIcon from '../../assets/icons/profile.png';
@@ -17,13 +20,238 @@ import wardrobeIcon from '../../assets/icons/wardrobe.png';
 import './FeedPage.css';
 
 const feedRepository = createApiFeedRepository();
+const userRepository = createApiUserRepository();
+const wardrobeRepository = createApiWardrobeRepository();
+const FEED_PAGE_SIZE = 20;
+
+const buildMediaFilePath = (mediaId) => {
+  const numeric = Number(mediaId);
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    return '';
+  }
+  return `/api/v1/media/${numeric}/file`;
+};
+
+const toAbsoluteImageUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) {
+    return raw;
+  }
+  if (raw.startsWith('/')) {
+    return `${appConfig.apiBaseUrl}${raw}`;
+  }
+  return `${appConfig.apiBaseUrl}/${raw.replace(/^\/+/, '')}`;
+};
+
+const extractHashtags = (caption, metadata) => {
+  if (Array.isArray(metadata?.hashtags) && metadata.hashtags.length > 0) {
+    return metadata.hashtags
+      .map((tag) => `#${String(tag || '').trim().replace(/^#/, '')}`)
+      .filter((tag) => tag.length > 1);
+  }
+  const matches = String(caption || '').match(/#[\w\u0400-\u04FF-]+/g);
+  return Array.isArray(matches) ? matches : [];
+};
+
+const collectMetadataGalleryUrls = (metadata) => {
+  const md = metadata && typeof metadata === 'object' ? metadata : {};
+  const urls = [];
+  const add = (value) => {
+    const normalized = toAbsoluteImageUrl(value);
+    if (normalized && !urls.includes(normalized)) {
+      urls.push(normalized);
+    }
+  };
+
+  ['gallery_urls', 'image_urls', 'photos', 'preview_images'].forEach((key) => {
+    const raw = md?.[key];
+    if (Array.isArray(raw)) {
+      raw.forEach(add);
+    }
+  });
+
+  add(md?.image_url);
+  add(md?.avatar_image_url);
+  add(md?.cloth_image_url);
+  return urls;
+};
+
+const stripSystemCaptionLines = (value) => {
+  const text = String(value || '');
+  if (!text) {
+    return '';
+  }
+  return text
+    .split('\n')
+    .filter((line) => {
+      const normalized = line.trim().toLowerCase();
+      return !(normalized.startsWith('музыка:') || normalized.startsWith('источник:'));
+    })
+    .join('\n')
+    .trim();
+};
+
+const normalizeUsername = (value) => String(value || '').replace(/^@+/, '').trim().toLowerCase();
+
+const buildPostPhotos = (item) => {
+  const metadata = (item?.garment?.garment_metadata && typeof item.garment.garment_metadata === 'object')
+    ? item.garment.garment_metadata
+    : {};
+  const primaryUrl = toAbsoluteImageUrl(buildMediaFilePath(item?.garment?.media_id));
+  const avatarUrl = toAbsoluteImageUrl(buildMediaFilePath(metadata?.avatar_media_id));
+  const clothUrl = toAbsoluteImageUrl(buildMediaFilePath(metadata?.cloth_media_id));
+  const metadataGallery = collectMetadataGalleryUrls(metadata);
+
+  const photos = [];
+  const append = (value) => {
+    const normalized = toAbsoluteImageUrl(value);
+    if (normalized && !photos.includes(normalized)) {
+      photos.push(normalized);
+    }
+  };
+
+  append(primaryUrl);
+  metadataGallery.forEach(append);
+  append(avatarUrl);
+  append(clothUrl);
+  return photos;
+};
+
+const mapFeedItemToPost = (item) => {
+  const postId = Number(item?.id);
+  if (!Number.isInteger(postId) || postId <= 0) {
+    return null;
+  }
+
+  const metadata = (item?.garment?.garment_metadata && typeof item.garment.garment_metadata === 'object')
+    ? item.garment.garment_metadata
+    : {};
+  const photos = buildPostPhotos(item);
+  if (!Array.isArray(photos) || photos.length === 0) {
+    return null;
+  }
+
+  const rawUsername = String(item?.user?.username || '').trim();
+  const profileUsername = rawUsername || `user_${item?.user_id || postId}`;
+  const displayName = rawUsername || `Пользователь #${item?.user_id || postId}`;
+  const avatarUrl =
+    toAbsoluteImageUrl(item?.user?.avatar_url)
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=ff0000&color=fff`;
+  const rawCaption = String(item?.caption || '').trim();
+  const caption = stripSystemCaptionLines(rawCaption);
+  const hashtags = extractHashtags(rawCaption, metadata);
+  const sourceType = String(metadata?.source_type || metadata?.source || '').trim().toLowerCase();
+
+  return {
+    id: postId,
+    feedItemId: postId,
+    createdAt: item?.created_at || null,
+    userId: Number(item?.user?.id || item?.user_id || 0),
+    user: {
+      name: displayName,
+      username: `@${profileUsername}`,
+      avatar: avatarUrl
+    },
+    photos,
+    description: caption || 'Новый образ',
+    likes: Number(item?.likes_count || 0),
+    comments: Number(item?.comments_count || 0),
+    shares: 0,
+    tryOnCount: 0,
+    tags: hashtags,
+    isFollowingAuthor: Boolean(item?.author_is_followed),
+    sourceType,
+    sourcePostId: metadata?.source_post_id ? Number(metadata.source_post_id) : null,
+    outfit: {
+      brand: item?.garment?.brand || (sourceType === 'tryon' ? 'Swipelt Try-On' : 'Swipelt'),
+      type: item?.garment?.title || `Образ #${postId}`,
+      price: metadata?.price || 'Без цены',
+      available: true
+    }
+  };
+};
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return '';
+  }
+  try {
+    return new Date(value).toLocaleString();
+  } catch (error) {
+    return '';
+  }
+};
+
+const pluralizeRu = (value, one, few, many) => {
+  const abs = Math.abs(Number(value) || 0);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+  return many;
+};
+
+const formatRelativeTime = (value) => {
+  if (!value) {
+    return '';
+  }
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return '';
+  }
+
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (diffSeconds < 5) {
+    return 'только что';
+  }
+  if (diffSeconds < 60) {
+    return `${diffSeconds} ${pluralizeRu(diffSeconds, 'секунду', 'секунды', 'секунд')} назад`;
+  }
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `${diffMinutes} ${pluralizeRu(diffMinutes, 'минуту', 'минуты', 'минут')} назад`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} ${pluralizeRu(diffHours, 'час', 'часа', 'часов')} назад`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays} ${pluralizeRu(diffDays, 'день', 'дня', 'дней')} назад`;
+  }
+
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 5) {
+    return `${diffWeeks} ${pluralizeRu(diffWeeks, 'неделю', 'недели', 'недель')} назад`;
+  }
+
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) {
+    return `${diffMonths} ${pluralizeRu(diffMonths, 'месяц', 'месяца', 'месяцев')} назад`;
+  }
+
+  const diffYears = Math.floor(diffDays / 365);
+  return `${diffYears} ${pluralizeRu(diffYears, 'год', 'года', 'лет')} назад`;
+};
 
 const FeedPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, clearAuth } = useAuth();
+  const shouldSkipEntrySplash = Boolean(location.state?.openTab && location.state.openTab !== 'feed');
   
   // Состояние для показа сплеша после входа
-  const [showEntrySplash, setShowEntrySplash] = useState(true);
+  const [showEntrySplash, setShowEntrySplash] = useState(!shouldSkipEntrySplash);
   const [isTransitioning, setIsTransitioning] = useState(false);
   
   // Состояния для постов и навигации
@@ -33,6 +261,35 @@ const FeedPage = () => {
   const [likeCounts, setLikeCounts] = useState({});
   const [commentCounts, setCommentCounts] = useState({});
   const [photoTransition, setPhotoTransition] = useState(false);
+  const [savedWardrobeMap, setSavedWardrobeMap] = useState({});
+  const [apiPosts, setApiPosts] = useState([]);
+  const [feedHint, setFeedHint] = useState('');
+  const [guestPrompt, setGuestPrompt] = useState({
+    open: false,
+    actionLabel: ''
+  });
+  const [followStateMap, setFollowStateMap] = useState({});
+  const [followLoadingMap, setFollowLoadingMap] = useState({});
+  const [commentsPanel, setCommentsPanel] = useState({
+    open: false,
+    postId: null,
+    post: null,
+    items: [],
+    total: 0,
+    loading: false,
+    submitting: false,
+    error: '',
+    text: '',
+    replyTo: null
+  });
+  const [likesPanel, setLikesPanel] = useState({
+    open: false,
+    title: '',
+    items: [],
+    total: 0,
+    loading: false,
+    error: ''
+  });
   
   // Настройки из localStorage
   const [settings, setSettings] = useState(() => {
@@ -50,18 +307,28 @@ const FeedPage = () => {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const isSwiping = useRef(false);
+  const isFeedLoadingRef = useRef(false);
+  const nextCursorRef = useRef(0);
+  const hasMoreRef = useRef(true);
+  const apiPostIdsRef = useRef(new Set());
+  const feedPostsRef = useRef([]);
+  const feedHintTimerRef = useRef(null);
+  const endHintShownRef = useRef(false);
 
   // Эффект для скрытия сплеша
   useEffect(() => {
+    if (!showEntrySplash) {
+      return undefined;
+    }
     const timer = setTimeout(() => {
       setIsTransitioning(true);
       setTimeout(() => {
         setShowEntrySplash(false);
       }, 300);
-    }, 1500);
+    }, 450);
     
     return () => clearTimeout(timer);
-  }, []);
+  }, [showEntrySplash]);
   
   // Загружаем настройки темы
   useEffect(() => {
@@ -73,219 +340,175 @@ const FeedPage = () => {
     setSettings(prev => ({ ...prev, theme: savedTheme }));
   }, []);
 
-  const COMMON_AUDIO_URL = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3';
-  const COMMON_TRACK_TITLE = 'Calm Ambient Flow';
-  const COMMON_TRACK_SOURCE = 'SoundHelix';
+  const feedPosts = apiPosts;
 
-  // ПОСТЫ С ФОТО
-  const samplePosts = [
-    {
-      id: 1,
-      user: {
-        name: 'Алексей',
-        username: '@alex_style',
-        avatar: 'https://ui-avatars.com/api/?name=Алексей&background=ff0000&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Классический костюм и рубашка для офиса #офисныйстиль #деловойкостюм',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#костюм', '#офис', '#деловойстиль'],
-      outfit: {
-        brand: 'Giorgio Armani',
-        type: 'Костюм',
-        price: '45,000 ₽',
-        available: true
-      }
-    },
-    {
-      id: 2,
-      user: {
-        name: 'Мария',
-        username: '@mari_fashion',
-        avatar: 'https://ui-avatars.com/api/?name=Мария&background=ff3333&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1591369822096-ffd140ec948f?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Подборка вечерних платьев для особого случая #вечернийобраз #платье',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#платье', '#вечер', '#образ'],
-      outfit: {
-        brand: 'Dolce & Gabbana',
-        type: 'Платье',
-        price: '78,000 ₽',
-        available: true
-      }
-    },
-    {
-      id: 3,
-      user: {
-        name: 'Иван',
-        username: '@ivan_sport',
-        avatar: 'https://ui-avatars.com/api/?name=Иван&background=0088ff&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1485968579580-b6d095142e6e?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Спортивная коллекция для активного отдыха #спорт #стиль #тренировки',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#спорт', '#тренировки', '#активныйстиль'],
-      outfit: {
-        brand: 'Nike',
-        type: 'Спортивный костюм',
-        price: '12,500 ₽',
-        available: true
-      }
-    },
-    {
-      id: 4,
-      user: {
-        name: 'Елена',
-        username: '@elena_chic',
-        avatar: 'https://ui-avatars.com/api/?name=Елена&background=ff00aa&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1463100099107-aa0980c362e6?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Капсула для города: обувь и базовые вещи #повседневка #городскойстиль',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#повседневка', '#зара', '#городскойстиль'],
-      outfit: {
-        brand: 'Zara',
-        type: 'Повседневный комплект',
-        price: '8,900 ₽',
-        available: true
-      }
-    },
-    {
-      id: 5,
-      user: {
-        name: 'Дмитрий',
-        username: '@dima_classic',
-        avatar: 'https://ui-avatars.com/api/?name=Дмитрий&background=00aa00&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Верхняя одежда на осень: пальто и куртки #пальто #классика #осень',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#пальто', '#классика', '#осень'],
-      outfit: {
-        brand: 'Burberry',
-        type: 'Пальто',
-        price: '65,000 ₽',
-        available: true
-      }
-    },
-    {
-      id: 6,
-      user: {
-        name: 'Анна',
-        username: '@anna_boho',
-        avatar: 'https://ui-avatars.com/api/?name=Анна&background=ff8800&color=fff'
-      },
-      photos: [
-        'https://images.unsplash.com/photo-1485230895905-ec40ba36b9bc?auto=format&fit=crop&w=900&q=85&fm=jpg',
-        'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?auto=format&fit=crop&w=900&q=85&fm=jpg'
-      ],
-      description: 'Бохо-образы и легкие ткани для теплого сезона #бохо #свободныйстиль #творчество',
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      tryOnCount: 0,
-      music: COMMON_TRACK_TITLE,
-      audioUrl: COMMON_AUDIO_URL,
-      tags: ['#бохо', '#свободныйстиль', '#творчество'],
-      outfit: {
-        brand: 'Mango',
-        type: 'Бохо-комплект',
-        price: '11,500 ₽',
-        available: true
-      }
+  useEffect(() => {
+    feedPostsRef.current = feedPosts;
+  }, [feedPosts]);
+
+  useEffect(() => {
+    setFollowStateMap((prev) => {
+      const next = { ...prev };
+      feedPosts.forEach((post) => {
+        const normalizedUsername = String(post?.user?.username || '').replace(/^@+/, '').trim().toLowerCase();
+        if (!normalizedUsername) {
+          return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(next, normalizedUsername)) {
+          next[normalizedUsername] = Boolean(post?.isFollowingAuthor);
+        }
+      });
+      return next;
+    });
+  }, [feedPosts]);
+
+  const mergeFeedStats = (feedItems) => {
+    const items = Array.isArray(feedItems) ? feedItems : [];
+    setLikeCounts((prev) => {
+      const next = { ...prev };
+      items.forEach((item) => {
+        const postId = Number(item?.id);
+        if (Number.isInteger(postId) && postId > 0) {
+          next[postId] = Number(item?.likes_count || 0);
+        }
+      });
+      return next;
+    });
+    setCommentCounts((prev) => {
+      const next = { ...prev };
+      items.forEach((item) => {
+        const postId = Number(item?.id);
+        if (Number.isInteger(postId) && postId > 0) {
+          next[postId] = Number(item?.comments_count || 0);
+        }
+      });
+      return next;
+    });
+    setIsLiked((prev) => {
+      const next = { ...prev };
+      items.forEach((item) => {
+        const postId = Number(item?.id);
+        if (Number.isInteger(postId) && postId > 0) {
+          next[postId] = Boolean(item?.is_liked);
+        }
+      });
+      return next;
+    });
+  };
+
+  const loadApiFeedPage = async ({ reset = false } = {}) => {
+    if (isFeedLoadingRef.current) {
+      return;
     }
-  ];
+    if (!reset && !hasMoreRef.current) {
+      return;
+    }
+
+    isFeedLoadingRef.current = true;
+    if (!reset) {
+      setFeedHint('Загружаем новые посты...');
+    }
+    try {
+      const skip = reset ? 0 : nextCursorRef.current;
+      const page = await feedRepository.fetchFeedPage({ skip, limit: FEED_PAGE_SIZE });
+      const feedItems = Array.isArray(page?.items) ? page.items : [];
+
+      mergeFeedStats(feedItems);
+
+      if (reset) {
+        apiPostIdsRef.current = new Set();
+      }
+
+      const mappedPosts = [];
+      feedItems.forEach((item) => {
+        const mapped = mapFeedItemToPost(item);
+        if (!mapped) {
+          return;
+        }
+        if (apiPostIdsRef.current.has(mapped.id)) {
+          return;
+        }
+        apiPostIdsRef.current.add(mapped.id);
+        mappedPosts.push(mapped);
+      });
+
+      setApiPosts((prev) => (reset ? mappedPosts : [...prev, ...mappedPosts]));
+
+      const nextCursorValue = Number(page?.nextCursor);
+      const normalizedCursor = Number.isFinite(nextCursorValue) ? nextCursorValue : (skip + feedItems.length);
+      nextCursorRef.current = normalizedCursor;
+      hasMoreRef.current = Boolean(page?.hasMore);
+      if (page?.hasMore) {
+        endHintShownRef.current = false;
+        setFeedHint('');
+      } else if (!endHintShownRef.current) {
+        endHintShownRef.current = true;
+        setFeedHint('Лента загружена полностью');
+        if (feedHintTimerRef.current) {
+          clearTimeout(feedHintTimerRef.current);
+        }
+        feedHintTimerRef.current = setTimeout(() => {
+          setFeedHint('');
+        }, 2200);
+      }
+    } catch (error) {
+      if (reset) {
+        setApiPosts([]);
+      }
+      setFeedHint('');
+    } finally {
+      isFeedLoadingRef.current = false;
+    }
+  };
+
+  const showGuestPrompt = (actionLabel) => {
+    const normalizedLabel = String(actionLabel || 'выполнить это действие');
+    setGuestPrompt({
+      open: true,
+      actionLabel: normalizedLabel
+    });
+    setFeedHint(`Чтобы ${normalizedLabel}, войдите или зарегистрируйтесь`);
+    if (feedHintTimerRef.current) {
+      clearTimeout(feedHintTimerRef.current);
+    }
+    feedHintTimerRef.current = setTimeout(() => {
+      setFeedHint('');
+    }, 2600);
+  };
+
+  const requireNotGuest = (actionLabel) => {
+    if (!user?.isGuest) {
+      return true;
+    }
+    showGuestPrompt(actionLabel);
+    return false;
+  };
 
   useEffect(() => {
     let isMounted = true;
 
     void (async () => {
       try {
-        const feedItems = await feedRepository.fetchFeedItems({ skip: 0, limit: 200 });
+        const wardrobeItems = await wardrobeRepository.fetchWardrobeItems({ skip: 0, limit: 500 }).catch(() => []);
         if (!isMounted) {
           return;
         }
-
-        const byId = new Map(feedItems.map((item) => [Number(item?.id), item]));
-
-        setLikeCounts(
-          samplePosts.reduce((acc, post) => {
-            acc[post.id] = Number(byId.get(post.id)?.likes_count || 0);
-            return acc;
-          }, {})
-        );
-
-        setCommentCounts(
-          samplePosts.reduce((acc, post) => {
-            acc[post.id] = Number(byId.get(post.id)?.comments_count || 0);
-            return acc;
-          }, {})
-        );
-
-        setIsLiked(
-          samplePosts.reduce((acc, post) => {
-            acc[post.id] = Boolean(byId.get(post.id)?.is_liked);
-            return acc;
-          }, {})
-        );
+        const initialWardrobeMap = {};
+        wardrobeItems.forEach((item) => {
+          const postId = Number(item?.garment?.source_post_id);
+          const garmentId = Number(item?.garment_id);
+          if (Number.isInteger(postId) && postId > 0 && Number.isInteger(garmentId) && garmentId > 0) {
+            initialWardrobeMap[postId] = garmentId;
+          }
+        });
+        setSavedWardrobeMap(initialWardrobeMap);
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (isMounted) {
+          setSavedWardrobeMap({});
         }
-        setLikeCounts(
-          samplePosts.reduce((acc, post) => {
-            acc[post.id] = 0;
-            return acc;
-          }, {})
-        );
-        setCommentCounts(
-          samplePosts.reduce((acc, post) => {
-            acc[post.id] = 0;
-            return acc;
-          }, {})
-        );
-        setIsLiked({});
+      }
+      if (isMounted) {
+        await loadApiFeedPage({ reset: true });
       }
     })();
 
@@ -294,9 +517,16 @@ const FeedPage = () => {
     };
   }, []);
 
+  useEffect(() => () => {
+    if (feedHintTimerRef.current) {
+      clearTimeout(feedHintTimerRef.current);
+    }
+  }, []);
+
   // Получаем текущий пост и текущее фото
-  const currentPost = activeTab === 'feed' ? samplePosts[currentPostIndex] : null;
+  const currentPost = activeTab === 'feed' ? feedPosts[currentPostIndex] : null;
   const isFirstPhoto = currentPhotoIndex === 0;
+  const isFeedModalOpen = commentsPanel.open || likesPanel.open;
 
   useEffect(() => {
     const requestedTab = location.state?.openTab;
@@ -309,12 +539,14 @@ const FeedPage = () => {
       return;
     }
 
-    setActiveTab(requestedTab);
-    if (requestedTab === 'feed') {
-      setCurrentPostIndex(0);
-      setCurrentPhotoIndex(0);
+    if (requestedTab === 'chat' && user?.isGuest) {
+      showGuestPrompt('писать сообщения');
+      setActiveTab('feed');
+      return;
     }
-  }, [location.state]);
+
+    setActiveTab(requestedTab);
+  }, [location.state, user?.isGuest]);
 
   // Функции для навигации с анимацией
   const nextPhoto = () => {
@@ -342,7 +574,15 @@ const FeedPage = () => {
   };
 
   const nextPost = () => {
-    if (currentPostIndex < samplePosts.length - 1) {
+    if (!feedPosts.length) {
+      return;
+    }
+
+    if (currentPostIndex >= feedPosts.length - 3) {
+      void loadApiFeedPage();
+    }
+
+    if (currentPostIndex < feedPosts.length - 1) {
       setPhotoTransition(true);
       setTimeout(() => {
         setCurrentPostIndex(prev => prev + 1);
@@ -351,6 +591,21 @@ const FeedPage = () => {
           setPhotoTransition(false);
         }, 50);
       }, 200);
+    } else if (hasMoreRef.current) {
+      void (async () => {
+        await loadApiFeedPage();
+        const totalPosts = feedPostsRef.current.length;
+        if (totalPosts > currentPostIndex + 1) {
+          setPhotoTransition(true);
+          setTimeout(() => {
+            setCurrentPostIndex(prev => Math.min(prev + 1, totalPosts - 1));
+            setCurrentPhotoIndex(0);
+            setTimeout(() => {
+              setPhotoTransition(false);
+            }, 50);
+          }, 200);
+        }
+      })();
     } else {
       // Если достигли конца - возвращаемся к первому посту
       setPhotoTransition(true);
@@ -365,6 +620,9 @@ const FeedPage = () => {
   };
 
   const prevPost = () => {
+    if (!feedPosts.length) {
+      return;
+    }
     if (currentPostIndex > 0) {
       setPhotoTransition(true);
       setTimeout(() => {
@@ -378,7 +636,7 @@ const FeedPage = () => {
       // Если достигли начала - переходим к последнему посту
       setPhotoTransition(true);
       setTimeout(() => {
-        setCurrentPostIndex(samplePosts.length - 1);
+        setCurrentPostIndex(feedPosts.length - 1);
         setCurrentPhotoIndex(0);
         setTimeout(() => {
           setPhotoTransition(false);
@@ -389,7 +647,7 @@ const FeedPage = () => {
 
   // Обработка свайпов для мобильных
   useEffect(() => {
-    if (!showEntrySplash && activeTab === 'feed') {
+    if (!showEntrySplash && activeTab === 'feed' && !isFeedModalOpen) {
       const handleTouchStart = (e) => {
         if (isSwiping.current) return;
         touchStartX.current = e.touches[0].clientX;
@@ -428,7 +686,7 @@ const FeedPage = () => {
               if (currentPhotoIndex > 0) {
                 prevPhoto();
               } else if (isFirstPhoto) {
-                handleTryOn(currentPost.id, currentPhotoIndex);
+                handleTryOn(currentPost.id);
               }
             }
           } else {
@@ -457,12 +715,15 @@ const FeedPage = () => {
         }
       };
     }
-  }, [showEntrySplash, currentPostIndex, currentPhotoIndex, currentPost, isFirstPhoto, activeTab]);
+  }, [showEntrySplash, currentPostIndex, currentPhotoIndex, currentPost, isFirstPhoto, activeTab, isFeedModalOpen]);
 
   // Обработка клавиатуры для ПК
   useEffect(() => {
     if (!showEntrySplash) {
       const handleKeyDown = (e) => {
+        if (isFeedModalOpen) {
+          return;
+        }
         if (activeTab === 'feed') {
           switch(e.key.toLowerCase()) {
             case 'arrowright':
@@ -476,7 +737,7 @@ const FeedPage = () => {
               if (currentPhotoIndex > 0) {
                 prevPhoto();
               } else if (isFirstPhoto) {
-                handleTryOn(currentPost.id, currentPhotoIndex);
+                handleTryOn(currentPost.id);
               }
               break;
             case 'arrowup':
@@ -502,6 +763,9 @@ const FeedPage = () => {
       };
 
       const handleWheel = (e) => {
+        if (isFeedModalOpen) {
+          return;
+        }
         if (activeTab !== 'feed') {
           return;
         }
@@ -513,7 +777,7 @@ const FeedPage = () => {
           } else if (currentPhotoIndex > 0) {
             prevPhoto();
           } else if (isFirstPhoto) {
-            handleTryOn(currentPost.id, currentPhotoIndex);
+            handleTryOn(currentPost.id);
           }
           return;
         }
@@ -536,7 +800,7 @@ const FeedPage = () => {
         window.removeEventListener('wheel', handleWheel);
       };
     }
-  }, [showEntrySplash, currentPostIndex, currentPhotoIndex, currentPost, isFirstPhoto, activeTab, settings.showInstructions]);
+  }, [showEntrySplash, currentPostIndex, currentPhotoIndex, currentPost, isFirstPhoto, activeTab, settings.showInstructions, isFeedModalOpen]);
 
   // Сохраняем настройки в localStorage
   useEffect(() => {
@@ -544,6 +808,13 @@ const FeedPage = () => {
   }, [settings]);
 
   const handleLike = async (postId) => {
+    if (!requireNotGuest('лайкать посты')) {
+      return;
+    }
+    const normalizedPostId = Number(postId);
+    if (!Number.isInteger(normalizedPostId) || normalizedPostId <= 0) {
+      return;
+    }
     const wasLiked = Boolean(isLiked[postId]);
 
     setIsLiked((prev) => ({
@@ -557,9 +828,9 @@ const FeedPage = () => {
 
     try {
       if (wasLiked) {
-        await unlikeFeedItem(feedRepository, postId);
+        await unlikeFeedItem(feedRepository, normalizedPostId);
       } else {
-        await likeFeedItem(feedRepository, postId);
+        await likeFeedItem(feedRepository, normalizedPostId);
       }
     } catch (error) {
       setIsLiked((prev) => ({
@@ -591,9 +862,16 @@ const FeedPage = () => {
     }
   };
 
-  const handleTryOn = (postId, photoIndex = 0) => {
-    const post = samplePosts.find(p => p.id === postId);
-    const clothPhoto = post?.photos?.[photoIndex] || post?.photos?.[0] || '';
+  const handleTryOn = (postId) => {
+    if (!requireNotGuest('запускать примерку')) {
+      return;
+    }
+    const post = feedPostsRef.current.find((p) => Number(p.id) === Number(postId));
+    if (!post) {
+      return;
+    }
+    const photos = Array.isArray(post?.photos) ? post.photos : [];
+    const clothPhoto = photos.length > 0 ? photos[photos.length - 1] : '';
     navigate('/try-on', { 
       state: { 
         postId, 
@@ -601,13 +879,286 @@ const FeedPage = () => {
         user: post.user,
         photo: clothPhoto,
         clothPhoto,
-        autoStart: true
+        autoStart: false
       } 
     });
   };
 
-  const handleComment = (postId) => {
-    console.log('Open comments for:', postId);
+  const handleWardrobeToggle = async (post) => {
+    if (!requireNotGuest('сохранять вещи в гардероб')) {
+      return;
+    }
+    const currentGarmentId = savedWardrobeMap[post.id];
+
+    try {
+      if (currentGarmentId) {
+        await wardrobeRepository.removeByGarmentId(currentGarmentId);
+        setSavedWardrobeMap((prev) => {
+          const next = { ...prev };
+          delete next[post.id];
+          return next;
+        });
+        return;
+      }
+
+      const response = await wardrobeRepository.saveFromPost({
+        postId: post.id,
+        title: post.outfit?.type || `Образ #${post.id}`,
+        brand: post.outfit?.brand || null,
+        imageUrl: post.photos?.[0] || '',
+        category: post.tags?.[0]?.replace('#', '') || null,
+        price: post.outfit?.price || null
+      });
+
+      const garmentId = Number(response?.garment_id);
+      if (Number.isInteger(garmentId) && garmentId > 0) {
+        setSavedWardrobeMap((prev) => ({ ...prev, [post.id]: garmentId }));
+      }
+    } catch (error) {
+      // Keep optimistic UI unchanged on error.
+    }
+  };
+
+  const handleOpenLikesPanel = async (postId) => {
+    const normalizedId = Number(postId);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+      return;
+    }
+    setLikesPanel({
+      open: true,
+      title: `Лайки поста #${normalizedId}`,
+      items: [],
+      total: 0,
+      loading: true,
+      error: ''
+    });
+    try {
+      const payload = await feedRepository.fetchFeedItemLikes(normalizedId, { limit: 300 });
+      setLikesPanel({
+        open: true,
+        title: `Лайки поста #${normalizedId}`,
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        total: Number(payload?.total || 0),
+        loading: false,
+        error: ''
+      });
+    } catch (error) {
+      setLikesPanel({
+        open: true,
+        title: `Лайки поста #${normalizedId}`,
+        items: [],
+        total: 0,
+        loading: false,
+        error: error?.message || 'Не удалось загрузить лайки'
+      });
+    }
+  };
+
+  const handleExternalCommentCreated = (postId, increment = 1) => {
+    const normalizedId = Number(postId);
+    const normalizedInc = Number(increment);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+      return;
+    }
+    if (!Number.isFinite(normalizedInc) || normalizedInc <= 0) {
+      return;
+    }
+    setCommentCounts((prev) => ({
+      ...prev,
+      [normalizedId]: Math.max(0, Number(prev[normalizedId] || 0) + normalizedInc)
+    }));
+  };
+
+  const handleComment = async (postId) => {
+    if (!requireNotGuest('оставлять комментарии')) {
+      return;
+    }
+    const normalizedId = Number(postId);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+      return;
+    }
+    const selectedPost = feedPostsRef.current.find((post) => Number(post?.id) === normalizedId) || null;
+    setCommentsPanel({
+      open: true,
+      postId: normalizedId,
+      post: selectedPost,
+      items: [],
+      total: Number(commentCounts[normalizedId] ?? 0),
+      loading: true,
+      submitting: false,
+      error: '',
+      text: '',
+      replyTo: null
+    });
+
+    try {
+      const payload = await feedRepository.fetchFeedItemComments(normalizedId, { limit: 200 });
+      const normalizedItems = Array.isArray(payload?.items) ? payload.items : [];
+      const total = Number(payload?.total || normalizedItems.length || 0);
+      setCommentsPanel((prev) => ({
+        ...prev,
+        items: normalizedItems,
+        total,
+        loading: false,
+        error: '',
+        replyTo: null
+      }));
+      setCommentCounts((prev) => ({
+        ...prev,
+        [normalizedId]: total
+      }));
+    } catch (error) {
+      setCommentsPanel((prev) => ({
+        ...prev,
+        loading: false,
+        error: error?.message || 'Не удалось загрузить комментарии'
+      }));
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!requireNotGuest('оставлять комментарии')) {
+      return;
+    }
+    const postId = Number(commentsPanel.postId);
+    const text = String(commentsPanel.text || '').trim();
+    if (!Number.isInteger(postId) || postId <= 0) {
+      return;
+    }
+    if (!text) {
+      setCommentsPanel((prev) => ({
+        ...prev,
+        error: 'Введите комментарий'
+      }));
+      return;
+    }
+
+    setCommentsPanel((prev) => ({
+      ...prev,
+      submitting: true,
+      error: ''
+    }));
+
+    try {
+      const created = await feedRepository.addFeedItemComment(postId, { text });
+      setCommentsPanel((prev) => {
+        const nextItems = [...(Array.isArray(prev.items) ? prev.items : []), created];
+        return {
+          ...prev,
+          submitting: false,
+          text: '',
+          items: nextItems,
+          total: Number(prev.total || 0) + 1,
+          error: '',
+          replyTo: null,
+        };
+      });
+      setCommentCounts((prev) => ({
+        ...prev,
+        [postId]: Number(prev[postId] || 0) + 1
+      }));
+    } catch (error) {
+      setCommentsPanel((prev) => ({
+        ...prev,
+        submitting: false,
+        error: error?.message || 'Не удалось отправить комментарий'
+      }));
+    }
+  };
+
+  const handleReplyToComment = (comment) => {
+    if (!requireNotGuest('отвечать на комментарии')) {
+      return;
+    }
+    const username = String(comment?.username || '').replace(/^@+/, '').trim();
+    if (!username) {
+      return;
+    }
+    const mention = `@${username}, `;
+    setCommentsPanel((prev) => {
+      const currentText = String(prev.text || '');
+      const cleanedText = currentText.replace(/^@\S+,\s*/, '');
+      return {
+        ...prev,
+        replyTo: {
+          id: Number(comment?.id || 0),
+          username,
+        },
+        text: `${mention}${cleanedText}`,
+      };
+    });
+  };
+
+  const clearReplyTarget = () => {
+    setCommentsPanel((prev) => ({
+      ...prev,
+      replyTo: null,
+      text: String(prev.text || '').replace(/^@\S+,\s*/, ''),
+    }));
+  };
+
+  const handleToggleCommentLike = async (commentId) => {
+    if (!requireNotGuest('лайкать комментарии')) {
+      return;
+    }
+    const normalizedCommentId = Number(commentId);
+    if (!Number.isInteger(normalizedCommentId) || normalizedCommentId <= 0) {
+      return;
+    }
+
+    const currentItem = commentsPanel.items.find((item) => Number(item?.id) === normalizedCommentId);
+    if (!currentItem) {
+      return;
+    }
+
+    const wasLiked = Boolean(currentItem.is_liked);
+    const previousLikesCount = Number(currentItem.likes_count || 0);
+    setCommentsPanel((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => {
+        if (Number(item?.id) !== normalizedCommentId) {
+          return item;
+        }
+        return {
+          ...item,
+          is_liked: !wasLiked,
+          likes_count: Math.max(0, Number(item.likes_count || 0) + (wasLiked ? -1 : 1))
+        };
+      })
+    }));
+
+    try {
+      const payload = wasLiked
+        ? await feedRepository.unlikeComment(normalizedCommentId)
+        : await feedRepository.likeComment(normalizedCommentId);
+      setCommentsPanel((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => {
+          if (Number(item?.id) !== normalizedCommentId) {
+            return item;
+          }
+          return {
+            ...item,
+            is_liked: Boolean(payload?.is_liked),
+            likes_count: Number(payload?.likes_count || 0)
+          };
+        })
+      }));
+    } catch (error) {
+      setCommentsPanel((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => {
+          if (Number(item?.id) !== normalizedCommentId) {
+            return item;
+          }
+          return {
+            ...item,
+            is_liked: wasLiked,
+            likes_count: Math.max(0, previousLikesCount)
+          };
+        })
+      }));
+    }
   };
 
   const handleShare = (postId) => {
@@ -621,23 +1172,95 @@ const FeedPage = () => {
     }
   };
 
-  const handleFollow = (username) => {
-    console.log('Follow:', username);
+  const handleFollow = async (username) => {
+    if (!requireNotGuest('подписываться на пользователей')) {
+      return;
+    }
+    const normalized = String(username || '').replace(/^@+/, '').trim().toLowerCase();
+    if (!normalized) {
+      return;
+    }
+    if (followLoadingMap[normalized]) {
+      return;
+    }
+    const currentState = Boolean(followStateMap[normalized]);
+
+    setFollowLoadingMap((prev) => ({ ...prev, [normalized]: true }));
+    setFollowStateMap((prev) => ({ ...prev, [normalized]: !currentState }));
+    try {
+      if (currentState) {
+        await userRepository.unfollowUser(normalized);
+      } else {
+        await userRepository.followUser(normalized);
+      }
+    } catch (error) {
+      setFollowStateMap((prev) => ({ ...prev, [normalized]: currentState }));
+    } finally {
+      setFollowLoadingMap((prev) => ({ ...prev, [normalized]: false }));
+    }
+  };
+
+  const openUserProfile = (post) => {
+    const normalized = String(post?.user?.username || '').replace(/^@+/, '').trim();
+    if (!normalized) {
+      return;
+    }
+    const currentUsername = String(user?.username || '').trim().toLowerCase();
+    if (currentUsername && normalized.toLowerCase() === currentUsername) {
+      handleTabChange('profile');
+      return;
+    }
+    const authorUsername = normalizeUsername(post?.user?.username);
+    const fallbackPosts = feedPostsRef.current
+      .filter((item) => normalizeUsername(item?.user?.username) === authorUsername)
+      .map((item) => ({
+        feed_item_id: item.id,
+        caption: item.description,
+        image_url: item.photos?.[0] || '',
+        likes_count: likeCounts[item.id] ?? 0,
+        comments_count: commentCounts[item.id] ?? 0,
+        created_at: item.createdAt || new Date().toISOString(),
+        source_post_id: item.sourcePostId ?? null,
+        source_type: item.sourceType ?? null,
+        hashtags: Array.isArray(item.tags)
+          ? item.tags.map((tag) => String(tag || '').replace(/^#/, '').trim()).filter(Boolean)
+          : []
+      }));
+    navigate(`/u/${encodeURIComponent(normalized)}`, {
+      state: {
+        fallbackProfile: {
+          username: normalized,
+          avatar_url: post?.user?.avatar || '',
+          posts_count: fallbackPosts.length,
+          likes_count: fallbackPosts.reduce((acc, item) => acc + Number(item.likes_count || 0), 0),
+          wardrobe_count: 0,
+          followers_count: 0,
+          following_count: 0,
+          is_following: false,
+          posts: fallbackPosts
+        }
+      }
+    });
   };
 
   const handleCamera = () => {
+    if (!requireNotGuest('запускать примерку')) {
+      return;
+    }
     navigate('/try-on');
   };
 
-  const handlePostClick = (index) => {
+  const handleLogoClick = () => {
     setPhotoTransition(true);
     setTimeout(() => {
-      setCurrentPostIndex(index);
+      setActiveTab('feed');
+      setCurrentPostIndex(0);
       setCurrentPhotoIndex(0);
       setTimeout(() => {
         setPhotoTransition(false);
       }, 50);
-    }, 200);
+    }, 160);
+    void loadApiFeedPage({ reset: true });
   };
 
   const handlePhotoClick = (index) => {
@@ -652,17 +1275,10 @@ const FeedPage = () => {
 
   // Переключение между вкладками
   const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === 'feed') {
-      setPhotoTransition(true);
-      setTimeout(() => {
-        setCurrentPostIndex(0);
-        setCurrentPhotoIndex(0);
-        setTimeout(() => {
-          setPhotoTransition(false);
-        }, 50);
-      }, 200);
+    if (tab === 'chat' && !requireNotGuest('писать сообщения')) {
+      return;
     }
+    setActiveTab(tab);
   };
 
   // Показать инструкцию
@@ -738,12 +1354,12 @@ const FeedPage = () => {
       case 'chat':
         return <ChatPage />;
       case 'profile':
-        return <ProfilePage />;
+        return <ProfilePage onCommentCreated={handleExternalCommentCreated} />;
       case 'feed':
       default:
         return (
           <div className="photo-feed">
-            {samplePosts.map((post, index) => (
+            {feedPosts.map((post, index) => (
               <div
                 key={post.id}
                 className={`photo-container ${index === currentPostIndex ? 'active' : ''}`}
@@ -788,18 +1404,45 @@ const FeedPage = () => {
                     <div className="post-content">
                       <div className="post-header">
                         <div className="user-info">
-                          <img src={post.user.avatar} alt={post.user.name} className="user-avatar" />
+                          <img
+                            src={post.user.avatar}
+                            alt={post.user.name}
+                            className="user-avatar"
+                            onClick={() => openUserProfile(post)}
+                          />
                           <div className="user-details">
-                            <h3 className="user-name">{post.user.name}</h3>
-                            <p className="user-username">{post.user.username}</p>
+                            <h3 className="user-name" onClick={() => openUserProfile(post)}>{post.user.name}</h3>
+                            <p className="user-username" onClick={() => openUserProfile(post)}>
+                              {post.user.username}
+                              {(() => {
+                                const postUsername = String(post?.user?.username || '').replace(/^@+/, '').trim().toLowerCase();
+                                const currentUsername = String(user?.username || '').trim().toLowerCase();
+                                const isOwnPost = Boolean(postUsername) && Boolean(currentUsername) && postUsername === currentUsername;
+                                return isOwnPost ? <span className="self-chip">Вы</span> : null;
+                              })()}
+                            </p>
                           </div>
                         </div>
-                        <button 
-                          className="follow-btn" 
-                          onClick={() => handleFollow(post.user.username)}
-                        >
-                          Подписаться
-                        </button>
+                        {(() => {
+                          const postUsername = String(post?.user?.username || '').replace(/^@+/, '').trim().toLowerCase();
+                          const currentUsername = String(user?.username || '').trim().toLowerCase();
+                          const isOwnPost = Boolean(postUsername) && Boolean(currentUsername) && postUsername === currentUsername;
+                          const isFollowing = Boolean(followStateMap[postUsername]);
+                          const isUpdating = Boolean(followLoadingMap[postUsername]);
+                          return (
+                            !isOwnPost ? (
+                              <button
+                                className={`follow-btn ${isFollowing ? 'is-following' : ''}`}
+                                onClick={() => {
+                                  void handleFollow(post.user.username);
+                                }}
+                                disabled={isUpdating}
+                              >
+                                {isUpdating ? '...' : (isFollowing ? 'Вы подписаны' : 'Подписаться')}
+                              </button>
+                            ) : null
+                          );
+                        })()}
                       </div>
 
                       <div className="post-description">
@@ -812,13 +1455,6 @@ const FeedPage = () => {
                           ))}
                         </div>
                       </div>
-
-                      <MusicTicker
-                        title={post.music}
-                        source={COMMON_TRACK_SOURCE}
-                        audioUrl={post.audioUrl}
-                        isActive={currentPost.id === post.id && activeTab === 'feed'}
-                      />
 
                       <div className="outfit-info">
                         <div className="outfit-item">
@@ -858,7 +1494,7 @@ const FeedPage = () => {
 
                   <button 
                     className="action-btn" 
-                    onClick={() => handleComment(post.id)} 
+                    onClick={() => { void handleComment(post.id); }} 
                     title="Комментарии"
                   >
                     <span className="action-icon">
@@ -881,7 +1517,7 @@ const FeedPage = () => {
                   {currentPost.id === post.id && isFirstPhoto && (
                     <button 
                       className="action-btn try-on-action" 
-                      onClick={() => handleTryOn(post.id, currentPhotoIndex)} 
+                      onClick={() => handleTryOn(post.id)} 
                       title="Примерять эту одежду"
                     >
                       <span className="action-icon">
@@ -891,20 +1527,28 @@ const FeedPage = () => {
                       <span className="action-count">{post.tryOnCount}</span>
                     </button>
                   )}
+
+                  <button
+                    className={`action-btn wardrobe-action ${savedWardrobeMap[post.id] ? 'saved' : ''}`}
+                    onClick={() => handleWardrobeToggle(post)}
+                    title={savedWardrobeMap[post.id] ? 'Убрать из гардероба' : 'Сохранить в гардероб'}
+                  >
+                    <span className="action-icon">
+                      <img src={wardrobeIcon} alt="" className="action-icon-img" />
+                    </span>
+                    <span className="action-text">{savedWardrobeMap[post.id] ? 'Сохранено' : 'Гардероб'}</span>
+                  </button>
                 </div>
               </div>
             ))}
             
-            <div className="post-indicator">
-              {samplePosts.map((_, index) => (
-                <div
-                  key={index}
-                  className={`indicator-dot ${index === currentPostIndex ? 'active' : ''}`}
-                  onClick={() => handlePostClick(index)}
-                  title={`Пост ${index + 1}`}
-                />
-              ))}
-            </div>
+            {feedHint && (
+              <div
+                className={`feed-meta-hint ${/войдите или зарегистрируйтесь/i.test(feedHint) ? 'feed-meta-hint--auth' : ''}`}
+              >
+                {feedHint}
+              </div>
+            )}
           </div>
         );
     }
@@ -913,10 +1557,14 @@ const FeedPage = () => {
   return (
     <div className="tiktok-container">
       <nav className="top-nav">
-        <div className="logo">Swipelt</div>
+        <button type="button" className="logo-btn" onClick={handleLogoClick}>
+          <span className="logo">Swipelt</span>
+        </button>
       </nav>
 
-      {renderContent()}
+      <div className="feed-tab-content">
+        {renderContent()}
+      </div>
 
       <nav className="bottom-nav">
         <button 
@@ -965,6 +1613,197 @@ const FeedPage = () => {
           <span className="nav-label">Профиль</span>
         </button>
       </nav>
+
+      {commentsPanel.open && (
+        <div
+          className="feed-modal-backdrop"
+          onClick={() => setCommentsPanel((prev) => ({ ...prev, open: false, replyTo: null }))}
+        >
+          <div className="feed-modal-sheet feed-modal-sheet--comments" onClick={(event) => event.stopPropagation()}>
+            <div className="feed-modal-header">
+              <div>
+                <h3>Комментарии</h3>
+                <p>{commentsPanel.post?.user?.username || ''}</p>
+              </div>
+              <button
+                type="button"
+                className="feed-modal-close"
+                onClick={() => setCommentsPanel((prev) => ({ ...prev, open: false, replyTo: null }))}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="feed-modal-meta">
+              <button
+                type="button"
+                className="feed-modal-meta-btn"
+                onClick={() => { void handleOpenLikesPanel(commentsPanel.postId); }}
+              >
+                {likeCounts[commentsPanel.postId] ?? commentsPanel.post?.likes ?? 0} лайков
+              </button>
+              <span>{commentCounts[commentsPanel.postId] ?? commentsPanel.total ?? 0} комментариев</span>
+            </div>
+
+            {commentsPanel.loading && <div className="feed-comments-empty">Загружаем комментарии...</div>}
+            {!commentsPanel.loading && commentsPanel.error && (
+              <div className="feed-comments-error">{commentsPanel.error}</div>
+            )}
+            {!commentsPanel.loading && !commentsPanel.error && commentsPanel.items.length === 0 && (
+              <div className="feed-comments-empty">Пока нет комментариев</div>
+            )}
+            {!commentsPanel.loading && !commentsPanel.error && commentsPanel.items.length > 0 && (
+              <div className="feed-comments-list">
+                {commentsPanel.items.map((comment) => (
+                  <div key={comment.id} className="feed-comment-item">
+                    <img
+                      src={comment.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.username)}&background=ff0000&color=fff`}
+                      alt={comment.username}
+                    />
+                    <div className="feed-comment-body">
+                      <div className="feed-comment-head">
+                        <strong>@{comment.username}</strong>
+                        <span>{formatRelativeTime(comment.created_at)}</span>
+                      </div>
+                      <p>{comment.text}</p>
+                      <div className="feed-comment-actions">
+                        <button
+                          type="button"
+                          className={`feed-comment-like-btn ${comment.is_liked ? 'is-liked' : ''}`}
+                          onClick={() => { void handleToggleCommentLike(comment.id); }}
+                        >
+                          {comment.is_liked ? '♥' : '♡'} {Number(comment.likes_count || 0)}
+                        </button>
+                        <button
+                          type="button"
+                          className="feed-comment-reply-btn"
+                          onClick={() => handleReplyToComment(comment)}
+                        >
+                          Ответить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {commentsPanel.replyTo && (
+              <div className="feed-reply-target">
+                <span>Ответ для @{commentsPanel.replyTo.username}</span>
+                <button type="button" onClick={clearReplyTarget}>×</button>
+              </div>
+            )}
+
+            <div className="feed-comment-form">
+              <textarea
+                value={commentsPanel.text}
+                placeholder={commentsPanel.replyTo ? `Ответ для @${commentsPanel.replyTo.username}...` : 'Оставьте комментарий...'}
+                onChange={(event) => setCommentsPanel((prev) => ({ ...prev, text: event.target.value }))}
+              />
+              <button
+                type="button"
+                className="feed-comment-submit"
+                onClick={() => { void handleSubmitComment(); }}
+                disabled={commentsPanel.submitting}
+              >
+                {commentsPanel.submitting ? '...' : 'Отправить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {likesPanel.open && (
+        <div className="feed-modal-backdrop" onClick={() => setLikesPanel((prev) => ({ ...prev, open: false }))}>
+          <div className="feed-modal-sheet feed-modal-sheet--small" onClick={(event) => event.stopPropagation()}>
+            <div className="feed-modal-header">
+              <div>
+                <h3>{likesPanel.title || 'Лайки'}</h3>
+                <p>{likesPanel.total} пользователей</p>
+              </div>
+              <button
+                type="button"
+                className="feed-modal-close"
+                onClick={() => setLikesPanel((prev) => ({ ...prev, open: false }))}
+              >
+                ×
+              </button>
+            </div>
+
+            {likesPanel.loading && <div className="feed-comments-empty">Загружаем список...</div>}
+            {!likesPanel.loading && likesPanel.error && <div className="feed-comments-error">{likesPanel.error}</div>}
+            {!likesPanel.loading && !likesPanel.error && likesPanel.items.length === 0 && (
+              <div className="feed-comments-empty">Пока никто не лайкнул этот пост</div>
+            )}
+            {!likesPanel.loading && !likesPanel.error && likesPanel.items.length > 0 && (
+              <div className="feed-comments-list">
+                {likesPanel.items.map((likeItem) => (
+                  <button
+                    key={`${likeItem.user_id}-${likeItem.liked_at}`}
+                    type="button"
+                    className="feed-like-user"
+                    onClick={() => navigate(`/u/${encodeURIComponent(likeItem.username)}`)}
+                  >
+                    <img
+                      src={likeItem.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(likeItem.username)}&background=ff0000&color=fff`}
+                      alt={likeItem.username}
+                    />
+                    <div>
+                      <strong>@{likeItem.username}</strong>
+                      <span>{formatDateTime(likeItem.liked_at)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {guestPrompt.open && (
+        <div className="feed-modal-backdrop" onClick={() => setGuestPrompt((prev) => ({ ...prev, open: false }))}>
+          <div className="feed-modal-sheet feed-modal-sheet--small" onClick={(event) => event.stopPropagation()}>
+            <div className="feed-modal-header">
+              <div>
+                <h3>Требуется аккаунт</h3>
+                <p>Чтобы {guestPrompt.actionLabel || 'выполнить это действие'}, войдите или зарегистрируйтесь.</p>
+              </div>
+              <button
+                type="button"
+                className="feed-modal-close"
+                onClick={() => setGuestPrompt((prev) => ({ ...prev, open: false }))}
+              >
+                ×
+              </button>
+            </div>
+            <div className="feed-guest-actions">
+              <button
+                type="button"
+                className="feed-comment-submit"
+                onClick={() => {
+                  setGuestPrompt((prev) => ({ ...prev, open: false }));
+                  clearAuth();
+                  navigate('/login');
+                }}
+              >
+                Войти
+              </button>
+              <button
+                type="button"
+                className="feed-modal-meta-btn"
+                onClick={() => {
+                  setGuestPrompt((prev) => ({ ...prev, open: false }));
+                  clearAuth();
+                  navigate('/register');
+                }}
+              >
+                Регистрация
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Инструкция (только на ленте) */}
       {settings.showInstructions && activeTab === 'feed' && (
