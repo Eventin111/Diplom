@@ -15,6 +15,12 @@ __all__ = [
     "FeedItemResponse",
     "FeedItemWithStats",
     "FeedPagination",
+    "FeedLikeUser",
+    "FeedLikesResponse",
+    "FeedCommentCreate",
+    "FeedCommentItem",
+    "FeedCommentsResponse",
+    "FeedCommentLikeResponse",
 ]
 
 
@@ -36,9 +42,49 @@ class FeedItemWithStats(FeedItemResponse):
     likes_count: int = 0
     comments_count: int = 0
     is_liked: bool = False
+    author_is_followed: bool = False
 
 
 class FeedPagination(BaseModel):
     items: List[FeedItemWithStats]
     next_cursor: Optional[str] = None
     has_more: bool = False
+
+
+class FeedLikeUser(BaseModel):
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    liked_at: datetime
+
+
+class FeedLikesResponse(BaseModel):
+    items: List[FeedLikeUser]
+    total: int = 0
+
+
+class FeedCommentCreate(BaseModel):
+    text: str
+
+
+class FeedCommentItem(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    avatar_url: Optional[str] = None
+    text: str
+    created_at: datetime
+    is_mine: bool = False
+    likes_count: int = 0
+    is_liked: bool = False
+
+
+class FeedCommentsResponse(BaseModel):
+    items: List[FeedCommentItem]
+    total: int = 0
+
+
+class FeedCommentLikeResponse(BaseModel):
+    comment_id: int
+    likes_count: int
+    is_liked: bool

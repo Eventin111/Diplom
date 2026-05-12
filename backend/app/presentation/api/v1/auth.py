@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.auth.security import create_token, get_current_user
 from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.user_repo import UserRepository
-from app.presentation.api.schemas.user import Token, UserCreate, UserResponse, UserUpdate
+from app.presentation.api.schemas.user import ProfileStatsResponse, Token, UserCreate, UserResponse, UserUpdate
 
 router = APIRouter()
 
@@ -63,5 +63,28 @@ async def update_me(
 ):
     """Обновить профиль текущего пользователя"""
     user_repo = UserRepository()
+
+    if user_data.email and user_data.email != current_user.email:
+        existing_by_email = await user_repo.get_by_email(db, user_data.email)
+        if existing_by_email and existing_by_email.id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким email уже существует")
+
+    if user_data.username and user_data.username != current_user.username:
+        existing_by_username = await user_repo.get_by_username(db, user_data.username)
+        if existing_by_username and existing_by_username.id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким username уже существует"
+            )
+
     updated_user = await user_repo.update(db, db_obj=current_user, obj_in=user_data)
     return updated_user
+
+
+@router.get("/me/stats", response_model=ProfileStatsResponse)
+async def get_me_stats(current_user: UserResponse = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Получить статистику текущего пользователя для профиля."""
+    user_repo = UserRepository()
+    payload = await user_repo.get_with_stats(db, user_id=current_user.id)
+    if not payload:
+        return ProfileStatsResponse()
+    return ProfileStatsResponse(**payload["stats"])
