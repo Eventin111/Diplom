@@ -73,11 +73,15 @@ class UserRepository(BaseRepository[User]):
         likes_count = likes_count_result.scalar()
 
         # Количество сессий примерки
-        tryons_count_result = await db.execute(select(func.count(TryOnSession.id)).where(TryOnSession.user_id == user_id))
+        tryons_count_result = await db.execute(
+            select(func.count(TryOnSession.id)).where(TryOnSession.user_id == user_id)
+        )
         tryons_count = tryons_count_result.scalar()
 
         # Количество сохраненных вещей в гардеробе
-        wardrobe_count_result = await db.execute(select(func.count(WardrobeItem.id)).where(WardrobeItem.user_id == user_id))
+        wardrobe_count_result = await db.execute(
+            select(func.count(WardrobeItem.id)).where(WardrobeItem.user_id == user_id)
+        )
         wardrobe_count = wardrobe_count_result.scalar()
 
         followers_count_result = await db.execute(

@@ -151,7 +151,9 @@ class FeedRepository(BaseRepository[FeedItem]):
             .where(Comment.feed_item_id.in_(feed_item_ids))
             .group_by(Comment.feed_item_id)
         )
-        comments_count_map = {feed_item_id: comments_count for feed_item_id, comments_count in comments_count_rows.all()}
+        comments_count_map = {
+            feed_item_id: comments_count for feed_item_id, comments_count in comments_count_rows.all()
+        }
 
         # Какие посты лайкнул текущий пользователь
         liked_feed_item_ids = set()

@@ -88,7 +88,9 @@ async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
             )
         )
         await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wardrobe_items_user_id ON wardrobe_items (user_id)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wardrobe_items_garment_id ON wardrobe_items (garment_id)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_wardrobe_items_garment_id ON wardrobe_items (garment_id)")
+        )
 
         await conn.execute(
             text(
@@ -104,8 +106,12 @@ async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
                 """
             )
         )
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follow_relations_follower_id ON follow_relations (follower_id)"))
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follow_relations_following_id ON follow_relations (following_id)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_follow_relations_follower_id ON follow_relations (follower_id)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_follow_relations_following_id ON follow_relations (following_id)")
+        )
 
         await conn.execute(
             text(

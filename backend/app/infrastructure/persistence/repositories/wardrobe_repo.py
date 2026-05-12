@@ -38,7 +38,9 @@ class WardrobeRepository(BaseRepository[WardrobeItem]):
         )
         return result.scalar_one_or_none()
 
-    async def get_user_items(self, db: AsyncSession, *, user_id: int, skip: int = 0, limit: int = 100) -> List[WardrobeItem]:
+    async def get_user_items(
+        self, db: AsyncSession, *, user_id: int, skip: int = 0, limit: int = 100
+    ) -> List[WardrobeItem]:
         result = await db.execute(
             select(WardrobeItem)
             .options(joinedload(WardrobeItem.garment).joinedload(Garment.media))

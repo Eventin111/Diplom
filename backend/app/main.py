@@ -10,7 +10,19 @@ from app.core.errors import setup_exception_handlers
 from app.core.hashing import hash_password
 from app.infrastructure.db.db import Base, engine
 from app.infrastructure.db.schema_compat import ensure_schema_compatibility
-from app.infrastructure.persistence.models import comment, comment_like, feed, follow, garment, likes, media, tryon, tryon_event, user, wardrobe
+from app.infrastructure.persistence.models import (
+    comment,
+    comment_like,
+    feed,
+    follow,
+    garment,
+    likes,
+    media,
+    tryon,
+    tryon_event,
+    user,
+    wardrobe,
+)
 from app.infrastructure.persistence.models.feed import FeedItem
 from app.infrastructure.persistence.models.garment import Garment
 from app.infrastructure.persistence.models.user import User

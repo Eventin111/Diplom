@@ -67,7 +67,9 @@ async def update_me(
     if user_data.email and user_data.email != current_user.email:
         existing_by_email = await user_repo.get_by_email(db, user_data.email)
         if existing_by_email and existing_by_email.id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким email уже существует")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь с таким email уже существует"
+            )
 
     if user_data.username and user_data.username != current_user.username:
         existing_by_username = await user_repo.get_by_username(db, user_data.username)

@@ -182,10 +182,7 @@ async def get_feed_item_comments(
             .where(CommentLike.comment_id.in_(comment_ids))
             .group_by(CommentLike.comment_id)
         )
-        likes_count_map = {
-            int(comment_id): int(count_value or 0)
-            for comment_id, count_value in likes_count_rows.all()
-        }
+        likes_count_map = {int(comment_id): int(count_value or 0) for comment_id, count_value in likes_count_rows.all()}
 
         liked_rows = await db.execute(
             select(CommentLike.comment_id).where(
