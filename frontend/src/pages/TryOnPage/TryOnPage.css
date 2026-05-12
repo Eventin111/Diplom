@@ -15,8 +15,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-secondary);
-  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
 }
 
 .tryon-page__title {
@@ -27,9 +27,12 @@
 
 .tryon-page__back,
 .tryon-page__link {
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--text-primary);
-  background: var(--card-bg);
+  background:
+    radial-gradient(140% 100% at 0% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+    color-mix(in srgb, var(--card-bg) 84%, transparent);
+  backdrop-filter: blur(10px) saturate(126%);
   border-radius: 999px;
   height: 34px;
   padding: 0 12px;
@@ -51,8 +54,11 @@
 }
 
 .tryon-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(255, 255, 255, 0.14), transparent 54%),
+    color-mix(in srgb, var(--card-bg) 83%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px) saturate(128%);
   border-radius: 14px;
   padding: 12px;
 }
@@ -60,6 +66,18 @@
 .tryon-card h2 {
   font-size: 14px;
   font-weight: 700;
+}
+
+.tryon-guest-lock {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+  margin-top: 10vh;
+}
+
+.tryon-guest-lock p {
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 .tryon-card--meta {
@@ -171,8 +189,17 @@
 }
 
 .tryon-btn--secondary {
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
+  background:
+    radial-gradient(130% 100% at 0% 0%, rgba(255, 255, 255, 0.12), transparent 52%),
+    color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px) saturate(124%);
+}
+
+.tryon-btn--danger {
+  background: rgba(180, 32, 32, 0.18);
+  border-color: rgba(255, 112, 112, 0.42);
+  color: #ffd8d8;
 }
 
 .tryon-alert {
@@ -273,12 +300,137 @@
   gap: 8px;
 }
 
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.profile-modal {
+  width: min(560px, 100%);
+  background:
+    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.16), transparent 45%),
+    color-mix(in srgb, var(--card-bg, #151515) 82%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(16px) saturate(135%);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.profile-modal-date {
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.profile-modal-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, #2b2b2b);
+  padding: 10px 12px;
+  background: var(--bg-secondary, #1c1c1c);
+  color: var(--text-primary, #fff);
+  resize: vertical;
+}
+
+.profile-modal-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.publish-status-chip {
+  margin-top: 10px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.publish-status-chip.publishing {
+  border-color: rgba(255, 183, 77, 0.5);
+  background: rgba(255, 183, 77, 0.12);
+  color: #ffe0a3;
+}
+
+.publish-status-chip.success {
+  border-color: rgba(78, 203, 113, 0.45);
+  background: rgba(78, 203, 113, 0.15);
+  color: #ccf7d8;
+}
+
+.publish-status-chip.error {
+  border-color: rgba(255, 108, 108, 0.45);
+  background: rgba(255, 108, 108, 0.15);
+  color: #ffd4d4;
+}
+
+.publish-progress {
+  margin-top: 10px;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.publish-progress__bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ff6f6f, #ffd27a, #6fe7a7);
+  transition: width 0.6s ease;
+}
+
+.publish-progress.is-running .publish-progress__bar {
+  width: 88%;
+}
+
+.publish-progress.is-success .publish-progress__bar {
+  width: 100%;
+}
+
+.profile-modal-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.profile-modal-cancel {
+  border: 1px solid var(--border-color, #2b2b2b);
+  background: var(--bg-secondary, #1c1c1c);
+  color: var(--text-primary, #fff);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.edit-profile-btn {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
 @media (max-width: 540px) {
   .tryon-card--meta {
     grid-template-columns: 1fr;
   }
 
   .tryon-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-modal-two-cols {
     grid-template-columns: 1fr;
   }
 }
