@@ -57,11 +57,14 @@ export const createApiAuthRepository = (deps = {}) => {
 
     if (!response.ok) {
       let detail = 'Request failed';
-      try {
-        const payload = await response.json();
-        detail = payload?.detail || JSON.stringify(payload);
-      } catch (error) {
-        detail = await response.text();
+      const rawDetail = await response.text();
+      if (rawDetail) {
+        try {
+          const payload = JSON.parse(rawDetail);
+          detail = payload?.detail || JSON.stringify(payload);
+        } catch (error) {
+          detail = rawDetail;
+        }
       }
 
       throw new Error(detail || 'Request failed');
@@ -143,6 +146,9 @@ export const createApiAuthRepository = (deps = {}) => {
       }
       if (partialUser.avatar || partialUser.avatar_url) {
         payload.avatar_url = partialUser.avatar || partialUser.avatar_url;
+      }
+      if (Object.prototype.hasOwnProperty.call(partialUser || {}, 'status')) {
+        payload.status = String(partialUser.status || '').trim();
       }
 
       const userPayload = await fetchJson('/auth/me', {

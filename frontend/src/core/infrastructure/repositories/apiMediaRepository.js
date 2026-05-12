@@ -2,6 +2,20 @@ import { appConfig } from '../../../config/appConfig';
 
 const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
 
+const extractErrorDetail = async (response, fallback) => {
+  const rawText = await response.text();
+  if (!rawText) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(rawText);
+    return payload?.detail || JSON.stringify(payload);
+  } catch (error) {
+    return rawText;
+  }
+};
+
 const normalizeUrl = (url) => {
   if (!url) {
     return '';
@@ -33,13 +47,7 @@ const requestWithAuth = async (path, init = {}, defaultErrorMessage) => {
   });
 
   if (!response.ok) {
-    let detail = defaultErrorMessage;
-    try {
-      const payload = await response.json();
-      detail = payload?.detail || JSON.stringify(payload);
-    } catch (error) {
-      detail = await response.text();
-    }
+    const detail = await extractErrorDetail(response, defaultErrorMessage);
     throw new Error(detail || defaultErrorMessage);
   }
 
@@ -69,13 +77,7 @@ export const createApiMediaRepository = () => ({
     });
 
     if (!response.ok) {
-      let detail = 'Ошибка загрузки файла';
-      try {
-        const payload = await response.json();
-        detail = payload?.detail || JSON.stringify(payload);
-      } catch (error) {
-        detail = await response.text();
-      }
+      const detail = await extractErrorDetail(response, 'Ошибка загрузки файла');
       throw new Error(detail || 'Ошибка загрузки файла');
     }
 

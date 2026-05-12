@@ -18,11 +18,14 @@ const request = async (path, init = {}) => {
 
   if (!response.ok) {
     let detail = 'Ошибка запроса';
-    try {
-      const payload = await response.json();
-      detail = payload?.detail || JSON.stringify(payload);
-    } catch (error) {
-      detail = await response.text();
+    const rawDetail = await response.text();
+    if (rawDetail) {
+      try {
+        const payload = JSON.parse(rawDetail);
+        detail = payload?.detail || JSON.stringify(payload);
+      } catch (error) {
+        detail = rawDetail;
+      }
     }
     throw new Error(detail || 'Ошибка запроса');
   }
@@ -35,13 +38,22 @@ const request = async (path, init = {}) => {
 };
 
 export const createApiFeedRepository = () => ({
-  async fetchFeedItems({ skip = 0, limit = 200 } = {}) {
+  async fetchFeedPage({ skip = 0, limit = 20 } = {}) {
     const query = new URLSearchParams({
       skip: String(skip),
       limit: String(limit)
     });
     const payload = await request(`/?${query.toString()}`);
-    return Array.isArray(payload?.items) ? payload.items : [];
+    return {
+      items: Array.isArray(payload?.items) ? payload.items : [],
+      hasMore: Boolean(payload?.has_more),
+      nextCursor: payload?.next_cursor || null
+    };
+  },
+
+  async fetchFeedItems({ skip = 0, limit = 200 } = {}) {
+    const page = await this.fetchFeedPage({ skip, limit });
+    return page.items;
   },
 
   async fetchLikedFeedIds() {
@@ -55,6 +67,56 @@ export const createApiFeedRepository = () => ({
 
   async unlikeFeedItem(feedItemId) {
     return request(`/${feedItemId}/like`, { method: 'DELETE' });
+  },
+
+  async fetchFeedItemLikes(feedItemId, { skip = 0, limit = 100 } = {}) {
+    const query = new URLSearchParams({
+      skip: String(skip),
+      limit: String(limit)
+    });
+    const payload = await request(`/${feedItemId}/likes?${query.toString()}`);
+    return {
+      items: Array.isArray(payload?.items) ? payload.items : [],
+      total: Number(payload?.total || 0)
+    };
+  },
+
+  async fetchFeedItemComments(feedItemId, { skip = 0, limit = 100 } = {}) {
+    const query = new URLSearchParams({
+      skip: String(skip),
+      limit: String(limit)
+    });
+    const payload = await request(`/${feedItemId}/comments?${query.toString()}`);
+    return {
+      items: Array.isArray(payload?.items) ? payload.items : [],
+      total: Number(payload?.total || 0)
+    };
+  },
+
+  async addFeedItemComment(feedItemId, { text }) {
+    return request(`/${feedItemId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text: String(text || '') })
+    });
+  },
+
+  async likeComment(commentId) {
+    return request(`/comments/${commentId}/like`, {
+      method: 'POST'
+    });
+  },
+
+  async unlikeComment(commentId) {
+    return request(`/comments/${commentId}/like`, {
+      method: 'DELETE'
+    });
+  },
+
+  async deleteFeedItem(feedItemId) {
+    return request(`/${feedItemId}`, { method: 'DELETE' });
   }
 });
 

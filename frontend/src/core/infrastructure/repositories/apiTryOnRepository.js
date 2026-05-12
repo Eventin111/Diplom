@@ -5,9 +5,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const buildTryOnUrl = () => `${appConfig.apiBaseUrl}/api/v1/tryon/try-on`;
 const buildTryOnSessionStatusUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}`;
 const buildTryOnSessionCancelUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}/cancel`;
+const buildTryOnSessionPublishUrl = (sessionId) => `${appConfig.apiBaseUrl}/api/v1/tryon/sessions/${sessionId}/publish`;
 const getAuthToken = () => localStorage.getItem(appConfig.authStorageKeys.token);
-const MODEL_MAX_UPLOAD_DIMENSION = 896;
-const CLOTH_MAX_UPLOAD_DIMENSION = 768;
+const MODEL_MAX_UPLOAD_DIMENSION = 1536;
+const CLOTH_MAX_UPLOAD_DIMENSION = 1536;
 
 const normalizeMediaUrl = (value) => {
   if (!value || typeof value !== 'string') {
@@ -70,6 +71,20 @@ const normalizeTryOnSessionPayload = (payload) => {
   }
 
   return normalizedPayload;
+};
+
+const extractErrorDetail = async (response) => {
+  const rawText = await response.text();
+  if (!rawText) {
+    return '';
+  }
+
+  try {
+    const payload = JSON.parse(rawText);
+    return payload?.detail || JSON.stringify(payload);
+  } catch (error) {
+    return rawText;
+  }
 };
 
 const buildTryOnWebSocketUrl = (sessionId) => {
@@ -195,19 +210,19 @@ export const createApiTryOnRepository = () => ({
     modelType = 'hd',
     category = 0,
     scale = 2.0,
-    numSteps = 4,
+    numSteps = 20,
     numSamples = 1,
     seed = -1
   }) {
     const modelImageFile = await imageInputToFile(modelImage, 'model-image.jpg', {
       preferJpeg: true,
       maxDimension: MODEL_MAX_UPLOAD_DIMENSION,
-      quality: 0.88
+      quality: 0.97
     });
     const clothImageFile = await imageInputToFile(clothImage, 'cloth-image.jpg', {
       preferJpeg: true,
       maxDimension: CLOTH_MAX_UPLOAD_DIMENSION,
-      quality: 0.9
+      quality: 0.98
     });
 
     const formData = new FormData();
@@ -234,13 +249,7 @@ export const createApiTryOnRepository = () => ({
       });
 
       if (!response.ok) {
-        let detail = '';
-        try {
-          const payload = await response.json();
-          detail = payload?.detail || JSON.stringify(payload);
-        } catch (error) {
-          detail = await response.text();
-        }
+        const detail = await extractErrorDetail(response);
         throw new Error(`Try-on request failed: ${response.status} ${detail}`);
       }
 
@@ -281,13 +290,7 @@ export const createApiTryOnRepository = () => ({
     });
 
     if (!response.ok) {
-      let detail = '';
-      try {
-        const payload = await response.json();
-        detail = payload?.detail || JSON.stringify(payload);
-      } catch (error) {
-        detail = await response.text();
-      }
+      const detail = await extractErrorDetail(response);
       throw new Error(`Try-on session request failed: ${response.status} ${detail}`);
     }
 
@@ -308,18 +311,66 @@ export const createApiTryOnRepository = () => ({
     });
 
     if (!response.ok) {
-      let detail = '';
-      try {
-        const payload = await response.json();
-        detail = payload?.detail || JSON.stringify(payload);
-      } catch (error) {
-        detail = await response.text();
-      }
+      const detail = await extractErrorDetail(response);
       throw new Error(`Try-on cancel request failed: ${response.status} ${detail}`);
     }
 
     const payload = await response.json();
     return normalizeTryOnSessionPayload(payload);
+  },
+
+  async deleteTryOnSession(sessionId) {
+    const headers = {};
+    const token = getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(buildTryOnSessionStatusUrl(sessionId), {
+      method: 'DELETE',
+      headers
+    });
+
+    if (!response.ok) {
+      const detail = await extractErrorDetail(response);
+      throw new Error(`Try-on delete request failed: ${response.status} ${detail}`);
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+    return response.json();
+  },
+
+  async publishTryOnSession(
+    sessionId,
+    { caption = '', sourceType = null, sourcePostId = null, hashtags = [] } = {}
+  ) {
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    const token = getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(buildTryOnSessionPublishUrl(sessionId), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        caption,
+        source_type: sourceType,
+        source_post_id: sourcePostId,
+        hashtags
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await extractErrorDetail(response);
+      throw new Error(`Try-on publish request failed: ${response.status} ${detail}`);
+    }
+
+    return response.json();
   },
 
   subscribeToTryOnSession(

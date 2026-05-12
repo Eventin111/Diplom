@@ -31,6 +31,7 @@ export const createBackendAuthRepository = (deps = {}) => {
       id: rawUser?.id,
       email,
       username: rawUser?.username || 'user',
+      status: rawUser?.status || '',
       avatar: rawUser?.avatar_url || rawUser?.avatar || undefined,
       isGuest
     });
@@ -169,6 +170,9 @@ export const createBackendAuthRepository = (deps = {}) => {
       }
       if (partialUser?.avatar || partialUser?.avatar_url) {
         payload.avatar_url = partialUser.avatar || partialUser.avatar_url;
+      }
+      if (Object.prototype.hasOwnProperty.call(partialUser || {}, 'status')) {
+        payload.status = String(partialUser?.status || '').trim();
       }
 
       const rawUser = await apiFetch('/api/v1/auth/me', {
