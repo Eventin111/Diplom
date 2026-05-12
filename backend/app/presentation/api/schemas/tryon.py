@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.application.dto.tryon_session_dto import TryOnSessionBase, TryOnSessionCreate, TryOnSessionUpdate
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
@@ -13,6 +13,10 @@ __all__ = [
     "TryOnSessionResponse",
     "TryOnResult",
     "TryOnEventResponse",
+    "RecentTryOnItem",
+    "RecentTryOnList",
+    "PublishTryOnRequest",
+    "PublishTryOnResponse",
 ]
 
 
@@ -45,3 +49,31 @@ class TryOnEventResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class RecentTryOnItem(BaseModel):
+    session_id: int
+    status: TryOnStatus
+    created_at: datetime
+    avatar_image_url: Optional[str] = None
+    cloth_image_url: Optional[str] = None
+    result_image_url: Optional[str] = None
+    error_text: Optional[str] = None
+    published_post_id: Optional[int] = None
+
+
+class RecentTryOnList(BaseModel):
+    items: list[RecentTryOnItem]
+
+
+class PublishTryOnRequest(BaseModel):
+    caption: Optional[str] = None
+    source_type: Optional[str] = None
+    source_post_id: Optional[int] = None
+    hashtags: list[str] = Field(default_factory=list)
+
+
+class PublishTryOnResponse(BaseModel):
+    feed_item_id: int
+    garment_id: int
+    image_url: Optional[str] = None

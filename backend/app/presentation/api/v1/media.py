@@ -25,6 +25,8 @@ ALLOWED_CONTENT_TYPES = {
     "image/png": MediaType.IMAGE,
     "image/gif": MediaType.IMAGE,
     "image/webp": MediaType.IMAGE,
+    "image/heic": MediaType.IMAGE,
+    "image/heif": MediaType.IMAGE,
 }
 
 

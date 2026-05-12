@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dto.media_dto import MediaType
+from app.application.dto.feed_dto import FeedItemCreate
+from app.application.dto.garment_dto import GarmentCreate
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
@@ -22,6 +24,8 @@ from app.infrastructure.maintenance.tryon_cleanup import run_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import run_tryon_recovery
 from app.infrastructure.ml.ootd_service import get_ootd_service
 from app.infrastructure.persistence.repositories.media_repo import MediaRepository
+from app.infrastructure.persistence.repositories.feed_repo import FeedRepository
+from app.infrastructure.persistence.repositories.garment_repo import GarmentRepository
 from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (
@@ -33,7 +37,15 @@ from app.infrastructure.queue.tryon_queue import (
     request_tryon_cancellation,
     requeue_tryon_dead_letter,
 )
-from app.presentation.api.schemas.tryon import TryOnResult, TryOnSessionCreate, TryOnSessionResponse
+from app.presentation.api.schemas.tryon import (
+    PublishTryOnRequest,
+    PublishTryOnResponse,
+    RecentTryOnItem,
+    RecentTryOnList,
+    TryOnResult,
+    TryOnSessionCreate,
+    TryOnSessionResponse,
+)
 from app.presentation.api.schemas.user import UserResponse
 
 router = APIRouter()
@@ -64,7 +76,7 @@ async def try_on(
     model_type: str = "hd",
     category: int = 0,
     scale: float = 2.0,
-    num_steps: int = 4,
+    num_steps: int = 20,
     num_samples: int = 1,
     seed: int = -1,
     current_user: UserResponse = Depends(enforce_current_user_tryon_rate_limit),
@@ -205,6 +217,127 @@ async def try_on(
         "result_media_id": None,
         "cached": False,
     }
+
+
+@router.get("/sessions/recent", response_model=RecentTryOnList)
+async def get_recent_tryon_sessions(
+    limit: int = 20,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tryon_repo = TryOnRepository()
+    feed_repo = FeedRepository()
+    sessions = await tryon_repo.get_user_sessions(db, user_id=current_user.id, skip=0, limit=max(1, min(limit, 100)))
+    user_feed_items = await feed_repo.get_user_feed(db, user_id=current_user.id, skip=0, limit=500)
+    published_by_session_id: dict[int, int] = {}
+    for item in user_feed_items:
+        metadata = (item.garment.garment_metadata if item.garment else {}) or {}
+        source_session_id = metadata.get("source_tryon_session_id")
+        try:
+            session_key = int(source_session_id)
+        except Exception:
+            continue
+        if session_key not in published_by_session_id:
+            published_by_session_id[session_key] = item.id
+
+    items: list[RecentTryOnItem] = []
+    for session in sessions:
+        items.append(
+            RecentTryOnItem(
+                session_id=session.id,
+                status=session.status,
+                created_at=session.created_at,
+                avatar_image_url=_build_media_file_url(session.avatar_media_id),
+                cloth_image_url=_build_media_file_url(session.cloth_media_id),
+                result_image_url=_build_media_file_url(session.result_media_id),
+                error_text=session.error_text,
+                published_post_id=published_by_session_id.get(session.id),
+            )
+        )
+
+    return RecentTryOnList(items=items)
+
+
+@router.post("/sessions/{session_id}/publish", response_model=PublishTryOnResponse)
+async def publish_tryon_session(
+    session_id: int,
+    payload: PublishTryOnRequest,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tryon_repo = TryOnRepository()
+    garment_repo = GarmentRepository()
+    feed_repo = FeedRepository()
+
+    session = await tryon_repo.get(db, session_id)
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Try-on session not found")
+    if session.status != TryOnStatus.COMPLETED or session.result_media_id is None:
+        raise HTTPException(status_code=400, detail="Примерка еще не завершена")
+
+    raw_hashtags = [str(tag or "").strip().lstrip("#") for tag in payload.hashtags]
+    normalized_hashtags = [tag for tag in raw_hashtags if tag]
+    garment = await garment_repo.create(
+        db,
+        obj_in=GarmentCreate(
+            title=f"Образ #{session.id}",
+            brand=None,
+            media_id=session.result_media_id,
+            garment_metadata={
+                "source": "tryon",
+                "source_tryon_session_id": session.id,
+                "avatar_media_id": session.avatar_media_id,
+                "cloth_media_id": session.cloth_media_id,
+                "source_type": payload.source_type,
+                "source_post_id": payload.source_post_id,
+                "hashtags": normalized_hashtags,
+            },
+        ),
+    )
+
+    source_note = ""
+    source_type = str(payload.source_type or "").strip().lower()
+    if source_type == "feed" and payload.source_post_id:
+        source_note = f"\n\nИсточник: пост #{payload.source_post_id}"
+    elif source_type == "upload":
+        source_note = "\n\nИсточник: загруженная пользователем одежда"
+
+    hashtags_text = " ".join(f"#{tag}" for tag in normalized_hashtags)
+    base_caption = (payload.caption or "").strip() or "Мой новый образ после примерки"
+    final_caption = f"{base_caption}{(' ' + hashtags_text) if hashtags_text else ''}{source_note}"
+    feed_item = await feed_repo.create(
+        db,
+        obj_in=FeedItemCreate(
+            garment_id=garment.id,
+            caption=final_caption,
+            media_ids=[],
+        ),
+        user_id=current_user.id,
+    )
+
+    return PublishTryOnResponse(
+        feed_item_id=feed_item.id,
+        garment_id=garment.id,
+        image_url=_build_media_file_url(session.result_media_id),
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_tryon_session(
+    session_id: int,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tryon_repo = TryOnRepository()
+    session = await tryon_repo.get(db, session_id)
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Try-on session not found")
+
+    if session.status not in {TryOnStatus.COMPLETED, TryOnStatus.FAILED, TryOnStatus.CANCELED}:
+        raise HTTPException(status_code=400, detail="Нельзя удалить примерку во время выполнения")
+
+    await tryon_repo.delete(db, id=session_id)
+    return {"success": True}
 
 
 @router.get("/sessions/{session_id}", response_model=TryOnResult)
