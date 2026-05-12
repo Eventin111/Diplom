@@ -54,7 +54,10 @@ class UserRepository(BaseRepository[User]):
         from sqlalchemy import func, select
 
         from app.infrastructure.persistence.models.feed import FeedItem
+        from app.infrastructure.persistence.models.follow import FollowRelation
         from app.infrastructure.persistence.models.likes import Like
+        from app.infrastructure.persistence.models.tryon import TryOnSession
+        from app.infrastructure.persistence.models.wardrobe import WardrobeItem
 
         # Базовые данные пользователя
         user = await self.get(db, user_id)
@@ -65,8 +68,36 @@ class UserRepository(BaseRepository[User]):
         posts_count_result = await db.execute(select(func.count(FeedItem.id)).where(FeedItem.user_id == user_id))
         posts_count = posts_count_result.scalar()
 
-        # Статистика лайков
+        # Количество лайков, поставленных пользователем
         likes_count_result = await db.execute(select(func.count(Like.id)).where(Like.user_id == user_id))
         likes_count = likes_count_result.scalar()
 
-        return {"user": user, "stats": {"posts_count": posts_count or 0, "likes_count": likes_count or 0}}
+        # Количество сессий примерки
+        tryons_count_result = await db.execute(select(func.count(TryOnSession.id)).where(TryOnSession.user_id == user_id))
+        tryons_count = tryons_count_result.scalar()
+
+        # Количество сохраненных вещей в гардеробе
+        wardrobe_count_result = await db.execute(select(func.count(WardrobeItem.id)).where(WardrobeItem.user_id == user_id))
+        wardrobe_count = wardrobe_count_result.scalar()
+
+        followers_count_result = await db.execute(
+            select(func.count(FollowRelation.id)).where(FollowRelation.following_id == user_id)
+        )
+        followers_count = followers_count_result.scalar()
+
+        following_count_result = await db.execute(
+            select(func.count(FollowRelation.id)).where(FollowRelation.follower_id == user_id)
+        )
+        following_count = following_count_result.scalar()
+
+        return {
+            "user": user,
+            "stats": {
+                "posts_count": posts_count or 0,
+                "likes_count": likes_count or 0,
+                "tryons_count": tryons_count or 0,
+                "wardrobe_count": wardrobe_count or 0,
+                "followers_count": followers_count or 0,
+                "following_count": following_count or 0,
+            },
+        }
