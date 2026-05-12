@@ -73,18 +73,83 @@ const normalizeTryOnSessionPayload = (payload) => {
   return normalizedPayload;
 };
 
+const extractDetailFromPayload = (payload) => {
+  if (!payload) {
+    return '';
+  }
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  if (typeof payload === 'object') {
+    return payload.detail || payload.error || payload.message || JSON.stringify(payload);
+  }
+  return String(payload);
+};
+
 const extractErrorDetail = async (response) => {
-  const rawText = await response.text();
-  if (!rawText) {
+  if (!response) {
     return '';
   }
 
-  try {
-    const payload = JSON.parse(rawText);
-    return payload?.detail || JSON.stringify(payload);
-  } catch (error) {
-    return rawText;
+  // Real Fetch Response supports clone(), which lets us avoid "body stream already read".
+  if (typeof response.clone === 'function') {
+    try {
+      const payload = await response.clone().json();
+      const detail = extractDetailFromPayload(payload);
+      if (detail) {
+        return detail;
+      }
+    } catch (error) {
+      // Fall through to text parser.
+    }
+
+    try {
+      const rawText = await response.clone().text();
+      if (!rawText) {
+        return '';
+      }
+      try {
+        const payload = JSON.parse(rawText);
+        return extractDetailFromPayload(payload);
+      } catch (error) {
+        return rawText;
+      }
+    } catch (error) {
+      return '';
+    }
   }
+
+  // Fallback for mocked responses in tests (no clone()).
+  if (typeof response.json === 'function') {
+    try {
+      const payload = await response.json();
+      const detail = extractDetailFromPayload(payload);
+      if (detail) {
+        return detail;
+      }
+    } catch (error) {
+      // Fall through to text parser.
+    }
+  }
+
+  if (typeof response.text === 'function') {
+    try {
+      const rawText = await response.text();
+      if (!rawText) {
+        return '';
+      }
+      try {
+        const payload = JSON.parse(rawText);
+        return extractDetailFromPayload(payload);
+      } catch (error) {
+        return rawText;
+      }
+    } catch (error) {
+      return '';
+    }
+  }
+
+  return '';
 };
 
 const buildTryOnWebSocketUrl = (sessionId) => {

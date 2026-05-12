@@ -219,6 +219,134 @@ describe('apiTryOnRepository', () => {
     ).rejects.toThrow('Try-on request failed: 502 upstream fail');
   });
 
+  it('cancels try-on session and returns normalized payload', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(
+      okResponse({
+        session: {
+          id: 7,
+          status: 'cancelled',
+          result_media_id: null
+        }
+      })
+    );
+    const repository = createApiTryOnRepository();
+
+    const payload = await repository.cancelTryOnSession(7);
+
+    expect(payload).toEqual(
+      expect.objectContaining({
+        status: 'cancelled',
+        session: expect.objectContaining({ id: 7, status: 'cancelled' })
+      })
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/tryon/sessions/7/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token'
+        })
+      })
+    );
+  });
+
+  it('surfaces cancel session backend error text', async () => {
+    global.fetch.mockResolvedValueOnce(errorResponse({ status: 409, text: 'already completed', jsonFails: true }));
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.cancelTryOnSession(3)).rejects.toThrow('Try-on cancel request failed: 409 already completed');
+  });
+
+  it('deletes try-on session and handles 204 response', async () => {
+    global.fetch
+      .mockResolvedValueOnce(okResponse(null, 204))
+      .mockResolvedValueOnce(okResponse({ deleted: true }, 200));
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.deleteTryOnSession(12)).resolves.toBeNull();
+    await expect(repository.deleteTryOnSession(13)).resolves.toEqual({ deleted: true });
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/api/v1/tryon/sessions/12',
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('publishes try-on session and forwards payload', async () => {
+    global.fetch.mockResolvedValueOnce(okResponse({ feed_item_id: 77 }));
+    const repository = createApiTryOnRepository();
+
+    await expect(
+      repository.publishTryOnSession(8, {
+        caption: 'caption',
+        sourceType: 'post',
+        sourcePostId: 15,
+        hashtags: ['a', 'b']
+      })
+    ).resolves.toEqual({ feed_item_id: 77 });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/tryon/sessions/8/publish',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({
+          caption: 'caption',
+          source_type: 'post',
+          source_post_id: 15,
+          hashtags: ['a', 'b']
+        })
+      })
+    );
+  });
+
+  it('surfaces publish backend error details', async () => {
+    global.fetch.mockResolvedValueOnce(errorResponse({ status: 403, payload: { detail: 'forbidden publish' } }));
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.publishTryOnSession(8, {})).rejects.toThrow('Try-on publish request failed: 403 forbidden publish');
+  });
+
+  it('extracts backend error using clone().json() when available', async () => {
+    const response = {
+      ok: false,
+      status: 502,
+      clone: jest.fn(() => ({
+        json: jest.fn().mockResolvedValue({ detail: 'clone json detail' })
+      })),
+      json: jest.fn().mockResolvedValue({ detail: 'ignored' }),
+      text: jest.fn().mockResolvedValue('ignored')
+    };
+    global.fetch.mockResolvedValueOnce(response);
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.getTryOnSession(77)).rejects.toThrow('Try-on session request failed: 502 clone json detail');
+  });
+
+  it('falls back from clone().json() to clone().text()', async () => {
+    const response = {
+      ok: false,
+      status: 503,
+      clone: jest
+        .fn()
+        .mockReturnValueOnce({
+          json: jest.fn().mockRejectedValue(new Error('bad json'))
+        })
+        .mockReturnValueOnce({
+          text: jest.fn().mockResolvedValue('clone text fallback')
+        }),
+      json: jest.fn().mockResolvedValue({ detail: 'ignored' }),
+      text: jest.fn().mockResolvedValue('ignored')
+    };
+    global.fetch.mockResolvedValueOnce(response);
+    const repository = createApiTryOnRepository();
+
+    await expect(repository.getTryOnSession(77)).rejects.toThrow('Try-on session request failed: 503 clone text fallback');
+  });
+
   it('adds auth header when loading try-on session if token exists', async () => {
     localStorage.setItem('swipelt_token', 'token');
     global.fetch.mockResolvedValueOnce(okResponse({ id: 77, status: 'queued' }));

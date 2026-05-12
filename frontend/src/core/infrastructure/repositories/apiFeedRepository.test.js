@@ -98,4 +98,92 @@ describe('apiFeedRepository', () => {
 
     await expect(repository.likeFeedItem(5)).rejects.toThrow('feed text error');
   });
+
+  it('surfaces json detail from error payload text', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(errorResponse({ text: JSON.stringify({ detail: 'json feed error' }) }));
+    const repository = createApiFeedRepository();
+
+    await expect(repository.likeFeedItem(5)).rejects.toThrow('json feed error');
+  });
+
+  it('loads likes and comments counters with normalization', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch
+      .mockResolvedValueOnce(okResponse({ items: [{ user_id: 1 }], total: 4 }))
+      .mockResolvedValueOnce(okResponse({ total: 2 }))
+      .mockResolvedValueOnce(okResponse({ items: [{ id: 11, text: 'hi' }] }));
+    const repository = createApiFeedRepository();
+
+    await expect(repository.fetchFeedItemLikes(9, { skip: 1, limit: 5 })).resolves.toEqual({
+      items: [{ user_id: 1 }],
+      total: 4
+    });
+    await expect(repository.fetchFeedItemComments(9, { skip: 0, limit: 3 })).resolves.toEqual({
+      items: [],
+      total: 2
+    });
+    await expect(repository.fetchFeedItemComments(9, { skip: 0, limit: 1 })).resolves.toEqual({
+      items: [{ id: 11, text: 'hi' }],
+      total: 0
+    });
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/api/v1/feed/9/likes?skip=1&limit=5',
+      expect.any(Object)
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8000/api/v1/feed/9/comments?skip=0&limit=3',
+      expect.any(Object)
+    );
+  });
+
+  it('adds, likes and unlikes comments', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch
+      .mockResolvedValueOnce(okResponse({ id: 41, text: 'text' }))
+      .mockResolvedValueOnce(okResponse({ ok: true }))
+      .mockResolvedValueOnce(okResponse({ ok: true }));
+    const repository = createApiFeedRepository();
+
+    await expect(repository.addFeedItemComment(9, { text: 'text' })).resolves.toEqual({ id: 41, text: 'text' });
+    await expect(repository.likeComment(41)).resolves.toEqual({ ok: true });
+    await expect(repository.unlikeComment(41)).resolves.toEqual({ ok: true });
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/api/v1/feed/9/comments',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({ text: 'text' })
+      })
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8000/api/v1/feed/comments/41/like',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:8000/api/v1/feed/comments/41/like',
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('deletes feed item and handles 204 response', async () => {
+    localStorage.setItem('swipelt_token', 'token');
+    global.fetch.mockResolvedValueOnce(okResponse(null, 204));
+    const repository = createApiFeedRepository();
+
+    await expect(repository.deleteFeedItem(12)).resolves.toBeNull();
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/feed/12',
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
 });
