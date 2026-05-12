@@ -33,3 +33,4 @@ class UserUpdate(UsernameValidationMixin, BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = Field(None, min_length=3, max_length=50, regex=r"^[a-zA-Z0-9_а-яА-ЯёЁ]+$")
     avatar_url: Optional[str] = None
+    status: Optional[str] = Field(None, max_length=160)

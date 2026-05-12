@@ -13,3 +13,4 @@ class User(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(160), nullable=True)

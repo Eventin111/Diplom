@@ -40,6 +40,10 @@ async def _column_exists(conn, table_name: str, column_name: str) -> bool:
 
 async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        if await _table_exists(conn, "users"):
+            if not await _column_exists(conn, "users", "status"):
+                await conn.execute(text("ALTER TABLE users ADD COLUMN status VARCHAR(160) NULL"))
+
         if await _table_exists(conn, "tryon_sessions"):
             if not await _column_exists(conn, "tryon_sessions", "cloth_media_id"):
                 await conn.execute(text("ALTER TABLE tryon_sessions ADD COLUMN cloth_media_id INTEGER NULL"))
@@ -68,3 +72,71 @@ async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
         )
         await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tryon_events_session_id ON tryon_events (session_id)"))
         await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tryon_events_event_type ON tryon_events (event_type)"))
+
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS wardrobe_items (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    garment_id INTEGER NOT NULL REFERENCES garments(id),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NULL,
+                    CONSTRAINT uq_wardrobe_items_user_garment UNIQUE (user_id, garment_id)
+                )
+                """
+            )
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wardrobe_items_user_id ON wardrobe_items (user_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wardrobe_items_garment_id ON wardrobe_items (garment_id)"))
+
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS follow_relations (
+                    id SERIAL PRIMARY KEY,
+                    follower_id INTEGER NOT NULL REFERENCES users(id),
+                    following_id INTEGER NOT NULL REFERENCES users(id),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NULL,
+                    CONSTRAINT uq_follow_relations_pair UNIQUE (follower_id, following_id)
+                )
+                """
+            )
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follow_relations_follower_id ON follow_relations (follower_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_follow_relations_following_id ON follow_relations (following_id)"))
+
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS comments (
+                    id SERIAL PRIMARY KEY,
+                    feed_item_id INTEGER NOT NULL REFERENCES feed_items(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    text TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NULL
+                )
+                """
+            )
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_comments_feed_item_id ON comments (feed_item_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_comments_user_id ON comments (user_id)"))
+
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS comment_likes (
+                    id SERIAL PRIMARY KEY,
+                    comment_id INTEGER NOT NULL REFERENCES comments(id),
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NULL,
+                    CONSTRAINT uq_comment_like_user UNIQUE (comment_id, user_id)
+                )
+                """
+            )
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_comment_likes_comment_id ON comment_likes (comment_id)"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_comment_likes_user_id ON comment_likes (user_id)"))
