@@ -10,9 +10,9 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.dto.media_dto import MediaType
 from app.application.dto.feed_dto import FeedItemCreate
 from app.application.dto.garment_dto import GarmentCreate
+from app.application.dto.media_dto import MediaType
 from app.application.use_cases.tryon_use_case import TryOnUseCase
 from app.core.config import settings
 from app.domain.enums.tryon import TryOnEventType, TryOnStatus
@@ -23,9 +23,9 @@ from app.infrastructure.db.db import AsyncSessionLocal, get_db
 from app.infrastructure.maintenance.tryon_cleanup import run_tryon_cleanup
 from app.infrastructure.maintenance.tryon_recovery import run_tryon_recovery
 from app.infrastructure.ml.ootd_service import get_ootd_service
-from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.infrastructure.persistence.repositories.feed_repo import FeedRepository
 from app.infrastructure.persistence.repositories.garment_repo import GarmentRepository
+from app.infrastructure.persistence.repositories.media_repo import MediaRepository
 from app.infrastructure.persistence.repositories.tryon_event_repo import TryOnEventRepository
 from app.infrastructure.persistence.repositories.tryon_repo import TryOnRepository
 from app.infrastructure.queue.tryon_queue import (

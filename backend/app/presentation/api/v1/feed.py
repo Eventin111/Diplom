@@ -18,8 +18,8 @@ from app.presentation.api.schemas.feed import (
     FeedItemCreate,
     FeedItemResponse,
     FeedItemWithStats,
-    FeedLikeUser,
     FeedLikesResponse,
+    FeedLikeUser,
     FeedPagination,
 )
 from app.presentation.api.schemas.social import LikeCreate, LikeResponse

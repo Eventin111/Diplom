@@ -9,11 +9,7 @@ from app.infrastructure.db.db import get_db
 from app.infrastructure.persistence.repositories.garment_repo import GarmentRepository
 from app.infrastructure.persistence.repositories.wardrobe_repo import WardrobeRepository
 from app.presentation.api.schemas.user import UserResponse
-from app.presentation.api.schemas.wardrobe import (
-    WardrobeItemResponse,
-    WardrobeListResponse,
-    WardrobeSaveFromPost,
-)
+from app.presentation.api.schemas.wardrobe import WardrobeItemResponse, WardrobeListResponse, WardrobeSaveFromPost
 
 router = APIRouter()
 
