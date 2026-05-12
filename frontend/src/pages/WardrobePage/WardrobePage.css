@@ -79,6 +79,42 @@
   height: calc(100vh - 140px);
 }
 
+.wardrobe-guest-lock {
+  margin: 14vh auto 0;
+  max-width: 560px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(255, 255, 255, 0.14), transparent 55%),
+    color-mix(in srgb, var(--card-bg) 84%, transparent);
+  backdrop-filter: blur(12px) saturate(124%);
+}
+
+.wardrobe-guest-lock h3 {
+  margin: 0 0 8px;
+}
+
+.wardrobe-guest-lock p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.wardrobe-guest-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wardrobe-guest-primary {
+  background: linear-gradient(45deg, #ff0000, #ff3333);
+  border-color: transparent;
+  color: #fff;
+}
+
 /* Категории */
 .categories-section {
   margin-bottom: 25px;
@@ -219,6 +255,33 @@
 
 .item-last-worn {
   color: var(--text-secondary);
+}
+
+.wardrobe-remove-btn {
+  margin-top: 10px;
+  width: 100%;
+  border: 1px solid rgba(255, 0, 0, 0.35);
+  background: rgba(255, 0, 0, 0.08);
+  color: #ff6666;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wardrobe-remove-btn:hover {
+  background: rgba(255, 0, 0, 0.18);
+  border-color: rgba(255, 0, 0, 0.6);
+}
+
+.empty-wardrobe {
+  background: var(--card-bg);
+  border: 1px dashed var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-top: 10px;
 }
 
 /* Скроллбар для гардероба */
