@@ -10,6 +10,7 @@ import ProfilePage from './pages/ProfilePage/ProfilePage';
 import SearchPage from './pages/SearchPage/SearchPage';
 import TryOnPage from './pages/TryOnPage/TryOnPage';
 import WardrobePage from './pages/WardrobePage/WardrobePage';
+import PublicProfilePage from './pages/PublicProfilePage/PublicProfilePage';
 import './styles/global.css';
 
 function FeedSplashScreen({ isVisible, onFinish }) {
@@ -61,17 +62,24 @@ function AppContent() {
     
     if (isAuthenticated && location.pathname === '/') {
       if (isInitialLoad) {
+        const requestedTab = location.state?.openTab;
+        const shouldShowFeedSplash = !requestedTab || requestedTab === 'feed';
+        if (!shouldShowFeedSplash) {
+          setIsInitialLoad(false);
+          return;
+        }
+
         setShowFeedSplash(true);
         setIsInitialLoad(false);
         
         const timer = setTimeout(() => {
           setShowFeedSplash(false);
-        }, 2000);
+        }, 800);
         
         return () => clearTimeout(timer);
       }
     }
-  }, [isAuthenticated, location.pathname, loading, isInitialLoad]);
+  }, [isAuthenticated, location.pathname, location.state, loading, isInitialLoad]);
 
   if (loading || showInitialSplash) {
     return <SplashScreen showImmediately={true} />;
@@ -140,6 +148,11 @@ function AppContent() {
           element={
             isAuthenticated ? <WardrobePage /> : <Navigate to="/login" replace />
           } 
+        />
+
+        <Route
+          path="/u/:username"
+          element={isAuthenticated ? <PublicProfilePage /> : <Navigate to="/login" replace />}
         />
 
         <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
