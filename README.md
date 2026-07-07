@@ -29,15 +29,13 @@ SwipeIt — это веб-платформа социальной сети, по
 
 ## Архитектура ML-системы
 ![](https://github.com/Eventin111/SwipeIt/blob/Frontend-Backend-ML/image/Архитектура.png)
-
-![](https://github.com/Eventin111/SwipeIt/blob/Frontend-Backend-ML/image/ML-пайплайн.png)
-
 Функция виртуальной примерки реализована как ML-модуль, интегрированный в веб-платформу SwipeIt. Система включает:
 
 - пайплайн обработки изображений пользователя
 - модель виртуальной примерки одежды
 - API для взаимодействия с фронтендом
 - систему хранения и обработки данных
+![](https://github.com/Eventin111/SwipeIt/blob/Frontend-Backend-ML/image/ML-пайплайн.png)
 
 ## Цель проекта
 
