@@ -28,8 +28,9 @@ SwipeIt — это веб-платформа социальной сети, по
 - AI Try-On models (VITON / diffusion approaches)
 
 ## Архитектура ML-системы
+![](https://github.com/Eventin111/SwipeIt/blob/Frontend-Backend-ML/image/Архитектура.png)
 
-<img width="1536" height="1024" alt="image" src="https://github.com/Eventin111/Diplom/blob/Frontend-Backend-ML/image/Примерка.png" />
+![](https://github.com/Eventin111/SwipeIt/blob/Frontend-Backend-ML/image/ML-пайплайн.png)
 
 Функция виртуальной примерки реализована как ML-модуль, интегрированный в веб-платформу SwipeIt. Система включает:
 
